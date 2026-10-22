@@ -289,6 +289,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         if (signinBtn) signinBtn.classList.remove("hidden");
         if (adminBtn) adminBtn.style.display = "none";
         if (banner) banner.classList.add("hidden");
+        const dropdown = document.getElementById("user-dropdown");
+        if (dropdown) dropdown.classList.add("hidden");
       }
     }
 
@@ -312,6 +314,10 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       openSignInModal();
     }
 
+    window.handleSignOut = handleSignOut;
+    window.openSignInModal = openSignInModal;
+    window.toggleUserMenu = toggleUserMenu;
+
     async function loadUserProfile() {
       try {
         const res = await fetch("/api/v1/auth/me", { credentials: "include", headers: fetchHeaders });
@@ -325,7 +331,6 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         console.error("Failed to load user profile", e);
         updateAuthUI(false);
       }
-    }
     }
 
     async function loadStats() {
