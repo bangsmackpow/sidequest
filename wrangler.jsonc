@@ -44,7 +44,7 @@
   // Non-secret environment variables
   "vars": {
     "ENVIRONMENT": "production",
-    "BETTER_AUTH_URL": "http://localhost:8787",
+    "BETTER_AUTH_URL": "https://sidequest.curtislamasters.workers.dev",
     "INBOUND_EMAIL_DOMAIN": "capture.sdvosb-proposals.mil"
   }
 }

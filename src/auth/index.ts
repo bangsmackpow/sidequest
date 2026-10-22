@@ -12,6 +12,13 @@ export function createAuth(env: Env) {
     database: drizzleAdapter(db, {
       provider: "sqlite",
       schema: {
+        users: schema.users,
+        sessions: schema.sessions,
+        accounts: schema.accounts,
+        verifications: schema.verifications,
+        organizations: schema.organizations,
+        members: schema.members,
+        invitations: schema.invitations,
         user: schema.users,
         session: schema.sessions,
         account: schema.accounts,
