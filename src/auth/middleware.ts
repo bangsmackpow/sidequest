@@ -1,7 +1,7 @@
 import { MiddlewareHandler } from "hono";
 import { createAuth } from "./index";
 import { createDb } from "../db";
-import { members } from "../db/schema";
+import { members, users } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { Env, AuthContext } from "../types/env";
 
@@ -30,6 +30,13 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
 
       let userRole: "admin" | "manager" | "member" = "member";
 
+      // Fetch user record to inspect 2FA and creation date
+      const [userRecord] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
       if (orgId) {
         const memberRec = await db
           .select()
@@ -53,12 +60,25 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
         }
       }
 
-      c.set("auth", {
+      // Calculate MFA Grace Period (3 days = 72 hours)
+      const createdAtMs = userRecord?.createdAt
+        ? new Date(userRecord.createdAt).getTime()
+        : Date.now();
+      const accountAgeMs = Date.now() - createdAtMs;
+      const graceLimitMs = 3 * 24 * 60 * 60 * 1000; // 3 days
+      const remainingDays = Math.max(0, Math.ceil((graceLimitMs - accountAgeMs) / (24 * 60 * 60 * 1000)));
+      const is2faActive = Boolean(userRecord?.twoFactorEnabled);
+      const mfaEnforced = accountAgeMs > graceLimitMs && !is2faActive;
+
+      const authContext: AuthContext = {
         user: {
           id: sessionResult.user.id,
           email: sessionResult.user.email,
           name: sessionResult.user.name,
           emailVerified: sessionResult.user.emailVerified,
+          twoFactorEnabled: is2faActive,
+          createdAt: userRecord?.createdAt || new Date(),
+          role: userRecord?.role || userRole,
         },
         session: {
           id: sessionResult.session.id,
@@ -68,12 +88,36 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
         },
         organizationId: orgId ?? null,
         role: userRole,
-      });
+        mfaGraceRemainingDays: remainingDays,
+        mfaEnforced,
+      };
+
+      c.set("auth", authContext);
+
+      // Enforce MFA blocking if grace period expired and accessing sensitive capture features
+      const path = c.req.path;
+      const isMfaExemptRoute =
+        path.startsWith("/api/v1/auth") ||
+        path.startsWith("/api/auth") ||
+        path === "/api/v1/stats";
+
+      if (mfaEnforced && !isMfaExemptRoute && c.req.method !== "GET") {
+        return c.json(
+          {
+            error: "MFA_REQUIRED",
+            message:
+              "Two-Factor Authentication is mandatory per federal capture compliance. Your 3-day grace period has expired. Please enable MFA in your account settings.",
+            mfaEnforced: true,
+            graceExpired: true,
+          },
+          403
+        );
+      }
 
       return next();
     }
   } catch (err: any) {
-    // Continue to dev header fallback if session lookup fails
+    // Continue to dev header fallback
   }
 
   // Developer / capture officer header fallback
@@ -84,9 +128,12 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
     c.set("auth", {
       user: {
         id: devUserId,
-        email: "curtis@valiantdefense.mil",
-        name: "Curtis (Capture Executive)",
+        email: "admin@sdvosb-proposals.mil",
+        name: "Curtis (Platform Administrator)",
         emailVerified: true,
+        twoFactorEnabled: false,
+        createdAt: new Date(),
+        role: devRole,
       },
       session: {
         id: "sess_dev_mock",
@@ -96,6 +143,8 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
       },
       organizationId: devOrg,
       role: devRole,
+      mfaGraceRemainingDays: 3,
+      mfaEnforced: false,
     });
     return next();
   }

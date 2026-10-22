@@ -15,10 +15,17 @@ import { RfiGenerator, ProposalTemplateType } from "../services/rfi-generator";
 import { runSamIngestion } from "../workers/ingest";
 import { handleInboundEmail } from "../workers/email";
 import { seedDatabase } from "../db/seed";
+import { authManagementRouter, adminUserRouter } from "./auth-management";
 
 export const apiRouter = new Hono<{ Bindings: Env }>();
 
-// All routes under /api/v1/* are protected via authMiddleware
+// Mount Auth Profile, MFA, & Password Reset endpoints
+apiRouter.route("/auth", authManagementRouter);
+
+// Mount Admin User Management Console endpoints
+apiRouter.route("/admin/users", adminUserRouter);
+
+// All remaining routes under /api/v1/* are protected via authMiddleware
 apiRouter.use("*", authMiddleware);
 
 // ==========================================

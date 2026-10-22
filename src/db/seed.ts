@@ -1,17 +1,17 @@
 import { createDb } from "./index";
 import {
   users,
+  accounts,
   organizations,
   members,
   savedSearchProfiles,
   capabilityStatements,
   opportunities,
   opportunityNotes,
-  opportunityAlerts,
   opportunityAttachments,
 } from "./schema";
 import { StorageService } from "../services/storage";
-import { sql } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
 
 export async function seedDatabase(d1: D1Database, bucket?: R2Bucket) {
   const db = createDb(d1);
@@ -36,25 +36,36 @@ export async function seedDatabase(d1: D1Database, bucket?: R2Bucket) {
     })
     .onConflictDoNothing();
 
-  // 2. Create Users & Memberships
+  // 2. Create Users, Credentials & Memberships
+  const adminPasswordHash = await hashPassword("AdminSDVOSB!2026#Secure");
+  const managerPasswordHash = await hashPassword("MarcusSDVOSB!2026#Secure");
+  const memberPasswordHash = await hashPassword("SarahSDVOSB!2026#Secure");
+
   const seedUsers = [
     {
       id: "user_curtis_admin",
-      name: "Curtis (Capture Executive)",
-      email: "curtis@valiantdefense.mil",
+      name: "Curtis (Platform Administrator)",
+      email: "admin@sdvosb-proposals.mil",
       role: "admin" as const,
+      passwordHash: adminPasswordHash,
+      // Fresh user created recently within the 3-day grace period
+      createdAt: new Date(),
     },
     {
       id: "user_marcus_mgr",
       name: "Marcus Vance (Proposal Director)",
       email: "m.vance@valiantdefense.mil",
       role: "manager" as const,
+      passwordHash: managerPasswordHash,
+      createdAt: new Date(Date.now() - 1 * 86400000), // 1 day ago
     },
     {
       id: "user_sarah_member",
       name: "Sarah Miller (Capture Analyst)",
       email: "s.miller@valiantdefense.mil",
       role: "member" as const,
+      passwordHash: memberPasswordHash,
+      createdAt: new Date(Date.now() - 4 * 86400000), // 4 days ago (grace period expired demo)
     },
   ];
 
@@ -66,8 +77,39 @@ export async function seedDatabase(d1: D1Database, bucket?: R2Bucket) {
         name: u.name,
         email: u.email,
         emailVerified: true,
+        twoFactorEnabled: false,
+        role: u.role,
+        createdAt: u.createdAt,
+        updatedAt: new Date(),
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          name: u.name,
+          email: u.email,
+          role: u.role,
+        },
+      });
+
+    // Create / update account for email & password authentication
+    await db
+      .insert(accounts)
+      .values({
+        id: `acc_${u.id}`,
+        userId: u.id,
+        accountId: u.email,
+        providerId: "credential",
+        password: u.passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: accounts.id,
+        set: {
+          password: u.passwordHash,
+          updatedAt: new Date(),
+        },
+      });
 
     await db
       .insert(members)
@@ -76,8 +118,14 @@ export async function seedDatabase(d1: D1Database, bucket?: R2Bucket) {
         organizationId: orgId,
         userId: u.id,
         role: u.role,
+        createdAt: new Date(),
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: members.id,
+        set: {
+          role: u.role,
+        },
+      });
   }
 
   // 3. Create Capability Statement
@@ -297,7 +345,7 @@ Contracting Officer, Defense Health Agency`,
     {
       id: "note_strategy_cyber",
       opportunityId: "sam-sdvosb-9901-cyber",
-      authorEmail: "curtis@valiantdefense.mil",
+      authorEmail: "admin@sdvosb-proposals.mil",
       subject: "Capture Strategy: Teaming & Past Performance Positioning",
       content: `Our DHA CPARS ratings from the HT0011-23-C-0019 contract position us as an undisputed Tier-1 prime candidate. We will highlight our 100% veteran-staffed Zero Trust engineering cell and FAR 52.219-27 compliance.`,
       source: "user",
@@ -354,5 +402,5 @@ Contracting Officer, Defense Health Agency`,
       .onConflictDoNothing();
   }
 
-  console.log("[Seed] Demonstration data successfully loaded!");
+  console.log("[Seed] Demonstration data successfully loaded with hashed credentials!");
 }

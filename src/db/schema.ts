@@ -2,7 +2,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ==========================================
-// 1. Better Auth Multi-Tenant Schema (with role on members)
+// 1. Better Auth Multi-Tenant Schema (with 2FA & Admin support)
 // ==========================================
 
 export const users = sqliteTable("users", {
@@ -11,6 +11,11 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
+  twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" }).notNull().default(false),
+  role: text("role").default("user"),
+  banned: integer("banned", { mode: "boolean" }).default(false),
+  banReason: text("ban_reason"),
+  banExpires: integer("ban_expires", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -29,6 +34,7 @@ export const sessions = sqliteTable("sessions", {
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   activeOrganizationId: text("active_organization_id"),
+  impersonatedBy: text("impersonated_by"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -70,6 +76,18 @@ export const verifications = sqliteTable("verifications", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+});
+
+export const twoFactors = sqliteTable("two_factors", {
+  id: text("id").primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+  lockedUntil: integer("locked_until", { mode: "timestamp" }),
 });
 
 export const organizations = sqliteTable("organizations", {

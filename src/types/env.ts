@@ -19,6 +19,9 @@ export type AuthUser = {
   email: string;
   name: string;
   emailVerified: boolean;
+  twoFactorEnabled?: boolean;
+  createdAt?: Date | number;
+  role?: string;
 };
 
 export type AuthSession = {
@@ -33,4 +36,6 @@ export type AuthContext = {
   session: AuthSession;
   organizationId?: string | null;
   role?: "admin" | "manager" | "member";
+  mfaGraceRemainingDays?: number;
+  mfaEnforced?: boolean;
 };
