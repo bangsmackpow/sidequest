@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sidequest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Cloudflare D1 Database Binding
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sidequest-db",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  // Cloudflare R2 Object Storage Binding
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "sidequest-attachments"
+    }
+  ],
+
+  // Cloudflare KV Namespace Binding
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "00000000000000000000000000000001"
+    }
+  ],
+
+  // Cloudflare Cron Scheduled Triggers
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
+
+  // Observability & Logging
+  "observability": {
+    "enabled": true
+  },
+
+  // Non-secret environment variables
+  "vars": {
+    "ENVIRONMENT": "development",
+    "BETTER_AUTH_URL": "http://localhost:8787",
+    "INBOUND_EMAIL_DOMAIN": "capture.sdvosb-proposals.mil"
+  }
+}
