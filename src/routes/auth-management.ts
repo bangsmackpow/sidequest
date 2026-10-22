@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { Env } from "../types/env";
 import { authMiddleware, requireRole } from "../auth/middleware";
+import { createDb } from "../db";
 import {
   users,
   accounts,
@@ -21,6 +22,136 @@ import {
 import { OutboundEmailDispatcher } from "../workers/outbound-email";
 
 export const authManagementRouter = new Hono<{ Bindings: Env }>();
+
+// Public endpoints: Sign In and Sign Out
+authManagementRouter.post("/sign-in", async (c) => {
+  const db = c.get("db") || createDb(c.env.DB);
+  const body = await c.req.json<{
+    email?: string;
+    password?: string;
+    code?: string;
+  }>();
+
+  if (!body.email || !body.password) {
+    return c.json({ error: "Email and password are required." }, 400);
+  }
+
+  const cleanEmail = body.email.trim().toLowerCase();
+  const [userRec] = await db.select().from(users).where(eq(users.email, cleanEmail)).limit(1);
+
+  if (!userRec) {
+    return c.json({ error: "Invalid email or password." }, 401);
+  }
+
+  const [acc] = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.userId, userRec.id), eq(accounts.providerId, "credential")))
+    .limit(1);
+
+  if (!acc || !acc.password) {
+    return c.json({ error: "Invalid email or password." }, 401);
+  }
+
+  const isValidPassword = await verifyPassword({
+    password: body.password,
+    hash: acc.password,
+  });
+
+  if (!isValidPassword) {
+    return c.json({ error: "Invalid email or password." }, 401);
+  }
+
+  // Check MFA if enabled on user record
+  if (userRec.twoFactorEnabled) {
+    if (!body.code) {
+      return c.json({
+        mfaRequired: true,
+        message: "Two-Factor Authentication is active on this account. Please enter your 6-digit authenticator code.",
+      }, 200);
+    }
+
+    const [tfRec] = await db.select().from(twoFactors).where(eq(twoFactors.userId, userRec.id)).limit(1);
+    if (!tfRec || !tfRec.secret) {
+      return c.json({ error: "MFA record missing. Contact platform administrator." }, 500);
+    }
+
+    let isCodeValid = await verifyTotp(tfRec.secret, body.code.trim());
+    if (!isCodeValid && tfRec.backupCodes) {
+      try {
+        const backupList: string[] = JSON.parse(tfRec.backupCodes);
+        const codeIndex = backupList.indexOf(body.code.trim());
+        if (codeIndex !== -1) {
+          isCodeValid = true;
+          backupList.splice(codeIndex, 1);
+          await db.update(twoFactors).set({ backupCodes: JSON.stringify(backupList) }).where(eq(twoFactors.id, tfRec.id));
+        }
+      } catch (e) {}
+    }
+
+    if (!isCodeValid) {
+      return c.json({ error: "Invalid two-factor authentication code. Please check your app and try again." }, 400);
+    }
+  }
+
+  // Generate new session token and record in sessions table
+  const sessionToken = "st_" + crypto.randomUUID().replace(/-/g, "") + "_" + Date.now().toString(36);
+  const sessionId = "sess_" + crypto.randomUUID().replace(/-/g, "");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  const [memberRec] = await db.select().from(members).where(eq(members.userId, userRec.id)).limit(1);
+  const activeOrgId = memberRec?.organizationId || "org_demo_sdvosb";
+
+  await db.insert(sessions).values({
+    id: sessionId,
+    userId: userRec.id,
+    token: sessionToken,
+    expiresAt,
+    activeOrganizationId: activeOrgId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Set cookies
+  c.header("Set-Cookie", `sidequest_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 86400}`, { append: true });
+  c.header("Set-Cookie", `better-auth.session_token=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 86400}`, { append: true });
+
+  return c.json({
+    success: true,
+    token: sessionToken,
+    user: {
+      id: userRec.id,
+      name: userRec.name,
+      email: userRec.email,
+      role: memberRec?.role || userRec.role || "member",
+      twoFactorEnabled: Boolean(userRec.twoFactorEnabled),
+    },
+    message: "Signed in successfully",
+  });
+});
+
+authManagementRouter.post("/sign-out", async (c) => {
+  const db = c.get("db") || createDb(c.env.DB);
+  const authHeader = c.req.header("Authorization");
+  const cookieHeader = c.req.header("Cookie") || "";
+  let token = "";
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7).trim();
+  } else {
+    const match = cookieHeader.match(/(?:sidequest_session|better-auth\.session_token)=([^;]+)/);
+    if (match) token = match[1];
+  }
+
+  if (token) {
+    await db.delete(sessions).where(eq(sessions.token, token));
+  }
+
+  c.header("Set-Cookie", "sidequest_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0", { append: true });
+  c.header("Set-Cookie", "better-auth.session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0", { append: true });
+
+  return c.json({ success: true, message: "Logged out successfully." });
+});
 
 // Apply authMiddleware to authenticated endpoints in authManagementRouter
 authManagementRouter.use("/me", authMiddleware);
@@ -569,12 +700,13 @@ adminUserRouter.post("/", async (c) => {
   });
 });
 
-// Admin Update User
+// Admin Update User (Name, Email, Role)
 adminUserRouter.patch("/:id", async (c) => {
   const db = c.get("db");
   const id = c.req.param("id");
   const body = await c.req.json<{
     name?: string;
+    email?: string;
     role?: "admin" | "manager" | "member";
   }>();
 
@@ -583,26 +715,64 @@ adminUserRouter.patch("/:id", async (c) => {
     return c.json({ error: "User not found" }, 404);
   }
 
-  if (body.name) {
-    await db
-      .update(users)
-      .set({ name: body.name.trim(), updatedAt: new Date() })
-      .where(eq(users.id, id));
+  const updates: Record<string, any> = { updatedAt: new Date() };
+
+  if (body.name !== undefined) {
+    const trimmedName = body.name.trim();
+    if (!trimmedName) {
+      return c.json({ error: "User name cannot be empty." }, 400);
+    }
+    updates.name = trimmedName;
   }
 
-  if (body.role) {
-    await db
-      .update(users)
-      .set({ role: body.role, updatedAt: new Date() })
-      .where(eq(users.id, id));
+  if (body.email !== undefined) {
+    const cleanEmail = body.email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return c.json({ error: "Invalid email address format." }, 400);
+    }
 
+    if (cleanEmail !== userRec.email.toLowerCase()) {
+      const [existing] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, cleanEmail))
+        .limit(1);
+
+      if (existing && existing.id !== id) {
+        return c.json({ error: "A user with this email address already exists." }, 400);
+      }
+
+      updates.email = cleanEmail;
+
+      // Also update the account credential record so the user can sign in with new email
+      await db
+        .update(accounts)
+        .set({ accountId: cleanEmail, updatedAt: new Date() })
+        .where(and(eq(accounts.userId, id), eq(accounts.providerId, "credential")));
+    }
+  }
+
+  if (body.role !== undefined) {
+    updates.role = body.role;
     await db
       .update(members)
       .set({ role: body.role })
       .where(eq(members.userId, id));
   }
 
-  return c.json({ success: true, message: "User updated successfully" });
+  await db
+    .update(users)
+    .set(updates)
+    .where(eq(users.id, id));
+
+  const [updatedUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+
+  return c.json({
+    success: true,
+    message: "User updated successfully.",
+    user: updatedUser,
+  });
 });
 
 // Admin Reset Password for a user

@@ -1,8 +1,8 @@
 import { MiddlewareHandler } from "hono";
 import { createAuth } from "./index";
 import { createDb } from "../db";
-import { members, users } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { members, users, sessions } from "../db/schema";
+import { eq, and, sql, gte } from "drizzle-orm";
 import { Env, AuthContext } from "../types/env";
 
 declare module "hono" {
@@ -117,34 +117,139 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
       return next();
     }
   } catch (err: any) {
-    // Continue to dev header fallback
+    // Continue to direct session / token validation
   }
 
-  // Developer / capture officer header fallback
+  // Check direct sessions table via Bearer token or session cookie
+  const authHeader = c.req.header("Authorization");
+  const cookieHeader = c.req.header("Cookie") || "";
+  let token = "";
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7).trim();
+  } else {
+    const match = cookieHeader.match(/(?:sidequest_session|better-auth\.session_token)=([^;]+)/);
+    if (match) token = match[1];
+  }
+
+  if (token) {
+    const [dbSession] = await db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.token, token), gte(sessions.expiresAt, new Date())))
+      .limit(1);
+
+    if (dbSession) {
+      const [userRecord] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, dbSession.userId))
+        .limit(1);
+
+      if (userRecord) {
+        const orgId = dbSession.activeOrganizationId || "org_demo_sdvosb";
+        const [memberRec] = await db
+          .select()
+          .from(members)
+          .where(and(eq(members.organizationId, orgId), eq(members.userId, userRecord.id)))
+          .limit(1);
+
+        const userRole = (memberRec?.role as "admin" | "manager" | "member") || userRecord.role || "member";
+        const createdAtMs = userRecord.createdAt ? new Date(userRecord.createdAt).getTime() : Date.now();
+        const accountAgeMs = Date.now() - createdAtMs;
+        const graceLimitMs = 3 * 24 * 60 * 60 * 1000;
+        const remainingDays = Math.max(0, Math.ceil((graceLimitMs - accountAgeMs) / (24 * 60 * 60 * 1000)));
+        const is2faActive = Boolean(userRecord.twoFactorEnabled);
+        const mfaEnforced = accountAgeMs > graceLimitMs && !is2faActive;
+
+        c.set("auth", {
+          user: {
+            id: userRecord.id,
+            email: userRecord.email,
+            name: userRecord.name,
+            emailVerified: userRecord.emailVerified,
+            twoFactorEnabled: is2faActive,
+            createdAt: userRecord.createdAt,
+            role: userRole,
+          },
+          session: {
+            id: dbSession.id,
+            userId: dbSession.userId,
+            expiresAt: dbSession.expiresAt,
+            activeOrganizationId: orgId,
+          },
+          organizationId: orgId,
+          role: userRole,
+          mfaGraceRemainingDays: remainingDays,
+          mfaEnforced,
+        });
+
+        const path = c.req.path;
+        const isMfaExemptRoute =
+          path.startsWith("/api/v1/auth") ||
+          path.startsWith("/api/auth") ||
+          path === "/api/v1/stats";
+
+        if (mfaEnforced && !isMfaExemptRoute && c.req.method !== "GET") {
+          return c.json(
+            {
+              error: "MFA_REQUIRED",
+              message:
+                "Two-Factor Authentication is mandatory per federal capture compliance. Your 3-day grace period has expired. Please enable MFA in your account settings.",
+              mfaEnforced: true,
+              graceExpired: true,
+            },
+            403
+          );
+        }
+
+        return next();
+      }
+    }
+  }
+
+  // Developer / capture officer header fallback (syncs with live user record)
   const devUserId = c.req.header("X-Dev-User-Id");
   if (devUserId) {
     const devRole = (c.req.header("X-Dev-Role") as "admin" | "manager" | "member") || "admin";
     const devOrg = c.req.header("X-Dev-Org-Id") || "org_demo_sdvosb";
+
+    // Lookup user by ID or email
+    const [dbUser] = await db
+      .select()
+      .from(users)
+      .where(sql`${users.id} = ${devUserId} OR ${users.email} = ${devUserId}`)
+      .limit(1);
+
+    const effectiveName = dbUser?.name || "Curtis (Platform Administrator)";
+    const effectiveEmail = dbUser?.email || "admin@sdvosb-proposals.mil";
+    const effectiveRole = (dbUser?.role as "admin" | "manager" | "member") || devRole;
+    const is2faActive = Boolean(dbUser?.twoFactorEnabled);
+    const createdAtMs = dbUser?.createdAt ? new Date(dbUser.createdAt).getTime() : Date.now();
+    const accountAgeMs = Date.now() - createdAtMs;
+    const graceLimitMs = 3 * 24 * 60 * 60 * 1000;
+    const remainingDays = Math.max(0, Math.ceil((graceLimitMs - accountAgeMs) / (24 * 60 * 60 * 1000)));
+    const mfaEnforced = accountAgeMs > graceLimitMs && !is2faActive;
+
     c.set("auth", {
       user: {
-        id: devUserId,
-        email: "admin@sdvosb-proposals.mil",
-        name: "Curtis (Platform Administrator)",
+        id: dbUser?.id || devUserId,
+        email: effectiveEmail,
+        name: effectiveName,
         emailVerified: true,
-        twoFactorEnabled: false,
-        createdAt: new Date(),
-        role: devRole,
+        twoFactorEnabled: is2faActive,
+        createdAt: dbUser?.createdAt || new Date(),
+        role: effectiveRole,
       },
       session: {
         id: "sess_dev_mock",
-        userId: devUserId,
+        userId: dbUser?.id || devUserId,
         expiresAt: new Date(Date.now() + 86400000),
         activeOrganizationId: devOrg,
       },
       organizationId: devOrg,
-      role: devRole,
-      mfaGraceRemainingDays: 3,
-      mfaEnforced: false,
+      role: effectiveRole,
+      mfaGraceRemainingDays: remainingDays,
+      mfaEnforced,
     });
     return next();
   }

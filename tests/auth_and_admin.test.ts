@@ -53,4 +53,31 @@ describe("Real Authentication, MFA & Admin Console Tests", () => {
     assert.strictEqual(remainingDaysOld, 0);
     assert.strictEqual(enforcedOld, true);
   });
+
+  test("User email format validation rejects invalid formats", () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    assert.strictEqual(emailRegex.test("valid.user@sdvosb.mil"), true);
+    assert.strictEqual(emailRegex.test("admin@sub.domain.co"), true);
+    assert.strictEqual(emailRegex.test("invalid-email"), false);
+    assert.strictEqual(emailRegex.test("no-at-sign.com"), false);
+    assert.strictEqual(emailRegex.test("@no-local-part.com"), false);
+    assert.strictEqual(emailRegex.test("spaces in@email.com"), false);
+  });
+
+  test("Session cookie and bearer token parsing logic", () => {
+    const parseCookie = (cookieHeader: string) => {
+      const match = cookieHeader.match(/(?:sidequest_session|better-auth\.session_token)=([^;]+)/);
+      return match ? match[1] : null;
+    };
+
+    assert.strictEqual(
+      parseCookie("sidequest_session=st_abc123_xyz; Path=/; HttpOnly"),
+      "st_abc123_xyz"
+    );
+    assert.strictEqual(
+      parseCookie("other=val; better-auth.session_token=st_token_456; other2=val"),
+      "st_token_456"
+    );
+    assert.strictEqual(parseCookie("unrelated_cookie=value"), null);
+  });
 });

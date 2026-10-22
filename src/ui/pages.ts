@@ -77,7 +77,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
           </button>
 
           <!-- User Account Menu -->
-          <div class="relative">
+          <div class="relative flex items-center gap-2">
             <button onclick="toggleUserMenu()" id="btn-user-menu" class="flex items-center space-x-2 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
               <i class="fa-solid fa-circle-user text-amber-400"></i>
               <span id="nav-user-name" class="font-semibold max-w-[120px] truncate">Admin</span>
@@ -85,8 +85,20 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               <i class="fa-solid fa-chevron-down text-[10px] text-slate-500"></i>
             </button>
 
+            <!-- Direct Header Log Out Button -->
+            <button onclick="handleSignOut()" id="btn-header-logout" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-xs text-slate-300 border border-slate-700 hover:border-rose-800/80 transition" title="Log out of platform">
+              <i class="fa-solid fa-arrow-right-from-bracket text-rose-400"></i>
+              <span class="hidden sm:inline font-semibold">Log Out</span>
+            </button>
+
+            <!-- Header Sign In Button (shown when logged out) -->
+            <button onclick="openSignInModal()" id="btn-header-signin" class="hidden flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-xs text-slate-950 font-bold transition">
+              <i class="fa-solid fa-right-to-bracket mr-1"></i>
+              <span>Sign In</span>
+            </button>
+
             <!-- Dropdown Menu -->
-            <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
+            <div id="user-dropdown" class="hidden absolute right-0 top-full mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
               <div class="px-3 py-2 border-b border-slate-800 text-[11px]">
                 <div id="menu-user-email" class="font-mono text-slate-300 truncate">admin@sdvosb-proposals.mil</div>
                 <div id="menu-user-role" class="text-amber-400 font-semibold uppercase mt-0.5">Role: Administrator</div>
@@ -106,7 +118,11 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
                 <i class="fa-solid fa-database mr-2 text-slate-500"></i>Seed Demo Data
               </button>
               <button onclick="openSignInModal(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 text-slate-400 flex items-center">
-                <i class="fa-solid fa-right-to-bracket mr-2 text-slate-500"></i>Switch Account / Sign In
+                <i class="fa-solid fa-right-to-bracket mr-2 text-slate-500"></i>Switch Account
+              </button>
+              <div class="border-t border-slate-800 my-1"></div>
+              <button onclick="handleSignOut(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-rose-950/60 text-rose-300 flex items-center font-medium transition">
+                <i class="fa-solid fa-arrow-right-from-bracket mr-2 text-rose-400"></i>Log Out / Sign Out
               </button>
             </div>
           </div>
@@ -177,17 +193,31 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
     let currentUser = null;
     let mfaStatus = null;
 
-    // Default administrative session headers (seamless development & API testing)
+    // Check stored credentials or default to initial administrator session
+    const storedToken = localStorage.getItem("sidequest_token");
+    const isLoggedOut = localStorage.getItem("sidequest_logged_out") === "true";
+
     const fetchHeaders = {
       "Content-Type": "application/json",
-      "X-Dev-User-Id": "user_curtis_admin",
-      "X-Dev-Role": "admin",
-      "X-Dev-Org-Id": "org_demo_sdvosb"
     };
+
+    if (storedToken) {
+      fetchHeaders["Authorization"] = "Bearer " + storedToken;
+    } else if (!isLoggedOut) {
+      // Default initial admin session during bootstrap
+      fetchHeaders["X-Dev-User-Id"] = "user_curtis_admin";
+      fetchHeaders["X-Dev-Role"] = "admin";
+      fetchHeaders["X-Dev-Org-Id"] = "org_demo_sdvosb";
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
 
     function toggleUserMenu() {
       const menu = document.getElementById("user-dropdown");
-      menu.classList.toggle("hidden");
+      if (menu) menu.classList.toggle("hidden");
     }
 
     // Close menu when clicking outside
@@ -199,54 +229,103 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       }
     });
 
+    function updateAuthUI(isLoggedIn, user = null, role = null, mfa = null) {
+      const userMenu = document.getElementById("btn-user-menu");
+      const logoutBtn = document.getElementById("btn-header-logout");
+      const signinBtn = document.getElementById("btn-header-signin");
+      const adminBtn = document.getElementById("btn-admin-console");
+      const adminMenu = document.getElementById("menu-admin-item");
+      const banner = document.getElementById("mfa-alert-banner");
+      const bannerText = document.getElementById("mfa-banner-text");
+
+      if (isLoggedIn && user) {
+        currentUser = user;
+        mfaStatus = mfa;
+
+        if (userMenu) userMenu.classList.remove("hidden");
+        if (logoutBtn) logoutBtn.classList.remove("hidden");
+        if (signinBtn) signinBtn.classList.add("hidden");
+
+        document.getElementById("nav-user-name").innerText = user.name || user.email;
+        document.getElementById("menu-user-email").innerText = user.email;
+        document.getElementById("menu-user-role").innerText = "Role: " + (role || "Member").toUpperCase();
+
+        const indicator = document.getElementById("nav-mfa-indicator");
+        const menuBadge = document.getElementById("menu-mfa-badge");
+
+        if (mfa && mfa.enabled) {
+          indicator.className = "w-2 h-2 rounded-full bg-emerald-400";
+          menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400";
+          menuBadge.innerText = "ACTIVE";
+          if (banner) banner.classList.add("hidden");
+        } else if (mfa && mfa.mfaEnforced) {
+          indicator.className = "w-2 h-2 rounded-full bg-rose-500 animate-ping";
+          menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 font-bold";
+          menuBadge.innerText = "EXPIRED";
+          if (banner && bannerText) {
+            banner.className = "bg-rose-950/80 border-b border-rose-800 text-rose-200 py-2 px-4 text-xs font-semibold flex items-center justify-between";
+            bannerText.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-400 mr-2 text-sm"></i><span><strong>MFA MANDATORY:</strong> Your 3-day grace period has expired. Two-Factor Authentication is required to access proposal features.</span>';
+            banner.classList.remove("hidden");
+          }
+        } else {
+          indicator.className = "w-2 h-2 rounded-full bg-amber-400";
+          menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300";
+          menuBadge.innerText = (mfa ? mfa.remainingDays : 3) + "d Grace";
+          if (banner && bannerText) {
+            banner.className = "bg-amber-950/60 border-b border-amber-800/80 text-amber-200 py-2 px-4 text-xs font-medium flex items-center justify-between";
+            bannerText.innerHTML = \`<i class="fa-solid fa-shield-halved text-amber-400 mr-2"></i><span>MFA Compliance Notice: Two-Factor Authentication is required. You have <strong>\${mfa ? mfa.remainingDays : 3} days</strong> remaining in your grace period.</span>\`;
+            banner.classList.remove("hidden");
+          }
+        }
+
+        const isAdmin = (role || "").toLowerCase() === "admin";
+        if (adminBtn) adminBtn.style.display = isAdmin ? "flex" : "none";
+        if (adminMenu) adminMenu.style.display = isAdmin ? "flex" : "none";
+      } else {
+        currentUser = null;
+        mfaStatus = null;
+        if (userMenu) userMenu.classList.add("hidden");
+        if (logoutBtn) logoutBtn.classList.add("hidden");
+        if (signinBtn) signinBtn.classList.remove("hidden");
+        if (adminBtn) adminBtn.style.display = "none";
+        if (banner) banner.classList.add("hidden");
+      }
+    }
+
+    async function handleSignOut() {
+      try {
+        await fetch("/api/v1/auth/sign-out", {
+          method: "POST",
+          headers: fetchHeaders,
+          credentials: "include"
+        });
+      } catch (e) {
+        console.error("Sign out error", e);
+      }
+      localStorage.removeItem("sidequest_token");
+      localStorage.setItem("sidequest_logged_out", "true");
+      delete fetchHeaders["Authorization"];
+      delete fetchHeaders["X-Dev-User-Id"];
+      delete fetchHeaders["X-Dev-Role"];
+      delete fetchHeaders["X-Dev-Org-Id"];
+      updateAuthUI(false);
+      openSignInModal();
+    }
+
     async function loadUserProfile() {
       try {
         const res = await fetch("/api/v1/auth/me", { credentials: "include", headers: fetchHeaders });
         if (res.ok) {
           const data = await res.json();
-          currentUser = data.user;
-          mfaStatus = data.mfa;
-
-          document.getElementById("nav-user-name").innerText = data.user.name || data.user.email;
-          document.getElementById("menu-user-email").innerText = data.user.email;
-          document.getElementById("menu-user-role").innerText = "Role: " + (data.role || "Member").toUpperCase();
-
-          const indicator = document.getElementById("nav-mfa-indicator");
-          const menuBadge = document.getElementById("menu-mfa-badge");
-          const banner = document.getElementById("mfa-alert-banner");
-          const bannerText = document.getElementById("mfa-banner-text");
-
-          if (data.mfa.enabled) {
-            indicator.className = "w-2 h-2 rounded-full bg-emerald-400";
-            menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400";
-            menuBadge.innerText = "ACTIVE";
-            banner.classList.add("hidden");
-          } else if (data.mfa.mfaEnforced) {
-            indicator.className = "w-2 h-2 rounded-full bg-rose-500 animate-ping";
-            menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 font-bold";
-            menuBadge.innerText = "EXPIRED";
-            banner.className = "bg-rose-950/80 border-b border-rose-800 text-rose-200 py-2 px-4 text-xs font-semibold flex items-center justify-between";
-            bannerText.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-400 mr-2 text-sm"></i><span><strong>MFA MANDATORY:</strong> Your 3-day grace period has expired. Two-Factor Authentication is required to access proposal features.</span>';
-            banner.classList.remove("hidden");
-          } else {
-            indicator.className = "w-2 h-2 rounded-full bg-amber-400";
-            menuBadge.className = "px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300";
-            menuBadge.innerText = data.mfa.remainingDays + "d Grace";
-            banner.className = "bg-amber-950/60 border-b border-amber-800/80 text-amber-200 py-2 px-4 text-xs font-medium flex items-center justify-between";
-            bannerText.innerHTML = \`<i class="fa-solid fa-shield-halved text-amber-400 mr-2"></i><span>MFA Compliance Notice: Two-Factor Authentication is required. You have <strong>\${data.mfa.remainingDays} days</strong> remaining in your grace period.</span>\`;
-            banner.classList.remove("hidden");
-          }
-
-          // Show or hide admin button based on role
-          const isAdmin = (data.role || "").toLowerCase() === "admin";
-          const adminBtn = document.getElementById("btn-admin-console");
-          const adminMenu = document.getElementById("menu-admin-item");
-          if (adminBtn) adminBtn.style.display = isAdmin ? "flex" : "none";
-          if (adminMenu) adminMenu.style.display = isAdmin ? "flex" : "none";
+          updateAuthUI(true, data.user, data.role, data.mfa);
+        } else {
+          updateAuthUI(false);
         }
       } catch (e) {
         console.error("Failed to load user profile", e);
+        updateAuthUI(false);
       }
+    }
     }
 
     async function loadStats() {
@@ -1208,13 +1287,16 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               <td class="py-3 px-3">\${mfaBadge}</td>
               <td class="py-3 px-3 text-slate-400 text-[11px]">\${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</td>
               <td class="py-3 px-4 text-right space-x-1">
+                <button onclick="openEditUserModal('\${u.id}', '\${encodeURIComponent(u.name)}', '\${encodeURIComponent(u.email)}', '\${u.role}')" class="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white text-[11px]" title="Edit User Name, Email, or Role">
+                  <i class="fa-solid fa-user-pen mr-1"></i>Edit
+                </button>
                 <button onclick="adminResetUserPassword('\${u.id}', '\${u.email}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]" title="Reset Password">
                   <i class="fa-solid fa-key mr-1 text-slate-400"></i>Reset Pass
                 </button>
                 <button onclick="adminResetUserMfa('\${u.id}', '\${u.email}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px]" title="Reset MFA">
                   <i class="fa-solid fa-shield-halved mr-1"></i>Reset 2FA
                 </button>
-                <button onclick="adminDeleteUser('\${u.id}', '\${u.name}')" class="px-2 py-1 rounded bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-[11px]" title="Delete User">
+                <button onclick="adminDeleteUser('\${u.id}', '\${encodeURIComponent(u.name)}')" class="px-2 py-1 rounded bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-[11px]" title="Delete User">
                   <i class="fa-solid fa-trash"></i>
                 </button>
               </td>
@@ -1226,29 +1308,197 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       }
     }
 
-    function openCreateUserModal() {
-      const name = prompt("Enter user full name:");
-      if (!name) return;
-      const email = prompt("Enter user email address:");
-      if (!email) return;
-      const role = prompt("Enter role (admin / manager / member):", "member");
-      if (!role) return;
+    function openEditUserModal(id, encName, encEmail, currentRole) {
+      const name = decodeURIComponent(encName);
+      const email = decodeURIComponent(encEmail);
 
-      fetch("/api/v1/admin/users", {
-        method: "POST",
-        headers: fetchHeaders,
-        credentials: "include",
-        body: JSON.stringify({ name, email, role })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
-          loadAdminUsers();
+      const existing = document.getElementById("edit-user-modal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "edit-user-modal";
+      modal.className = "fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-user-pen text-indigo-400 text-base"></i>
+              <h3 class="font-bold text-white text-base">Edit User Profile</h3>
+            </div>
+            <button onclick="document.getElementById('edit-user-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="edit-user-error" class="hidden p-2 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs"></div>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Full Name</label>
+              <input id="edit-user-name" type="text" value="\${escapeHtml(name)}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Email Address</label>
+              <input id="edit-user-email" type="email" value="\${escapeHtml(email)}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Organization Role</label>
+              <select id="edit-user-role" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+                <option value="admin" \${currentRole === 'admin' ? 'selected' : ''}>Admin (Platform Control)</option>
+                <option value="manager" \${currentRole === 'manager' ? 'selected' : ''}>Manager (Proposal Director)</option>
+                <option value="member" \${currentRole === 'member' ? 'selected' : ''}>Member (Capture Analyst)</option>
+              </select>
+            </div>
+            <div class="pt-2 flex justify-end space-x-2 border-t border-slate-800">
+              <button onclick="document.getElementById('edit-user-modal').remove()" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">
+                Cancel
+              </button>
+              <button onclick="submitEditUser('\${id}')" id="btn-save-user" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition">
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+    }
+
+    async function submitEditUser(userId) {
+      const name = document.getElementById("edit-user-name").value.trim();
+      const email = document.getElementById("edit-user-email").value.trim();
+      const role = document.getElementById("edit-user-role").value;
+      const errBox = document.getElementById("edit-user-error");
+      const btn = document.getElementById("btn-save-user");
+
+      if (!name || !email) {
+        errBox.innerText = "Full name and email address are required.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Saving...';
+
+      try {
+        const res = await fetch(\`/api/v1/admin/users/\${userId}\`, {
+          method: "PATCH",
+          headers: fetchHeaders,
+          credentials: "include",
+          body: JSON.stringify({ name, email, role })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("edit-user-modal").remove();
+          await loadAdminUsers();
+          if (currentUser && currentUser.id === userId) {
+            await loadUserProfile();
+          }
+          alert("User profile updated successfully!");
         } else {
-          alert(data.error || "Failed to create user");
+          errBox.innerText = data.error || "Failed to update user profile.";
+          errBox.classList.remove("hidden");
         }
-      });
+      } catch (e) {
+        errBox.innerText = e.message;
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save Changes';
+      }
+    }
+
+    function openCreateUserModal() {
+      const existing = document.getElementById("create-user-modal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "create-user-modal";
+      modal.className = "fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-user-plus text-indigo-400 text-base"></i>
+              <h3 class="font-bold text-white text-base">Create New Platform User</h3>
+            </div>
+            <button onclick="document.getElementById('create-user-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="create-user-error" class="hidden p-2 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs"></div>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Full Name</label>
+              <input id="create-user-name" type="text" placeholder="e.g. John Doe" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Email Address</label>
+              <input id="create-user-email" type="email" placeholder="e.g. j.doe@sdvosb-firm.mil" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Role</label>
+              <select id="create-user-role" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+                <option value="member" selected>Member (Capture Analyst)</option>
+                <option value="manager">Manager (Proposal Director)</option>
+                <option value="admin">Admin (Platform Administrator)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Temporary Password (optional)</label>
+              <input id="create-user-pass" type="text" placeholder="Defaults to SidequestSDVOSB!2026" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono text-[11px]">
+            </div>
+            <div class="pt-2 flex justify-end space-x-2 border-t border-slate-800">
+              <button onclick="document.getElementById('create-user-modal').remove()" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">
+                Cancel
+              </button>
+              <button onclick="submitCreateUser()" id="btn-submit-create-user" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition">
+                Create User
+              </button>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+    }
+
+    async function submitCreateUser() {
+      const name = document.getElementById("create-user-name").value.trim();
+      const email = document.getElementById("create-user-email").value.trim();
+      const role = document.getElementById("create-user-role").value;
+      const password = document.getElementById("create-user-pass").value.trim();
+      const errBox = document.getElementById("create-user-error");
+      const btn = document.getElementById("btn-submit-create-user");
+
+      if (!name || !email) {
+        errBox.innerText = "Full name and email are required.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Creating...';
+
+      try {
+        const res = await fetch("/api/v1/admin/users", {
+          method: "POST",
+          headers: fetchHeaders,
+          credentials: "include",
+          body: JSON.stringify({ name, email, role, password: password || undefined })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("create-user-modal").remove();
+          await loadAdminUsers();
+          alert(data.message);
+        } else {
+          errBox.innerText = data.error || "Failed to create user.";
+          errBox.classList.remove("hidden");
+        }
+      } catch (e) {
+        errBox.innerText = e.message;
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Create User';
+      }
     }
 
     function adminResetUserPassword(userId, email) {
@@ -1292,7 +1542,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
     }
 
     function adminDeleteUser(userId, name) {
-      if (!confirm(\`Are you sure you want to delete user "\${name}"? This will permanently revoke access.\`)) return;
+      const decodedName = decodeURIComponent(name);
+      if (!confirm(\`Are you sure you want to delete user "\${decodedName}"? This will permanently revoke access.\`)) return;
 
       fetch(\`/api/v1/admin/users/\${userId}\`, {
         method: "DELETE",
@@ -1311,14 +1562,127 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
     }
 
     function openSignInModal() {
-      const email = prompt("Enter email to sign in / switch context:", "admin@sdvosb-proposals.mil");
-      if (!email) return;
-      const role = prompt("Enter role for session (admin / manager / member):", "admin");
-      fetchHeaders["X-Dev-User-Id"] = email;
-      fetchHeaders["X-Dev-Role"] = role || "admin";
-      loadUserProfile();
-      loadOpportunities();
-      alert(\`Active context switched to: \${email} (\${role})\`);
+      const existing = document.getElementById("signin-modal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "signin-modal";
+      modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      const defaultEmail = currentUser ? currentUser.email : "admin@sdvosb-proposals.mil";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-shield-halved text-amber-400 text-lg"></i>
+              <h3 class="font-bold text-white text-base">Sign In to SDVOSB Capture</h3>
+            </div>
+            <button onclick="document.getElementById('signin-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="signin-error" class="hidden p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs"></div>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Email Address</label>
+              <input id="signin-email" type="email" value="\${defaultEmail}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100" placeholder="user@sdvosb.mil">
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-slate-400 font-semibold">Password</label>
+                <button type="button" onclick="openForgotPasswordModal()" class="text-[11px] text-amber-400 hover:underline">Forgot password?</button>
+              </div>
+              <input id="signin-password" type="password" value="AdminSDVOSB!2026#Secure" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100" placeholder="••••••••••••">
+            </div>
+            <div id="signin-mfa-group" class="hidden">
+              <label class="block text-amber-400 font-semibold mb-1">6-Digit Authenticator Code (MFA)</label>
+              <input id="signin-mfa-code" maxlength="6" class="w-full bg-slate-900 border border-amber-500/50 rounded p-2 text-center text-lg font-mono tracking-widest text-white focus:outline-none focus:border-amber-400" placeholder="123456">
+            </div>
+            <button onclick="submitSignIn()" id="btn-submit-signin" class="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-amber-500/20">
+              Sign In
+            </button>
+            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Default Admin: <span class="font-mono text-slate-300">admin@sdvosb-proposals.mil</span></span>
+              <button onclick="fillAdminDemoCreds()" class="text-amber-400 hover:underline font-semibold">Auto-Fill</button>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+    }
+
+    function fillAdminDemoCreds() {
+      const emailInput = document.getElementById("signin-email");
+      const passInput = document.getElementById("signin-password");
+      if (emailInput) emailInput.value = "admin@sdvosb-proposals.mil";
+      if (passInput) passInput.value = "AdminSDVOSB!2026#Secure";
+    }
+
+    async function submitSignIn() {
+      const errBox = document.getElementById("signin-error");
+      errBox.classList.add("hidden");
+      const email = document.getElementById("signin-email").value.trim();
+      const password = document.getElementById("signin-password").value;
+      const code = document.getElementById("signin-mfa-code") ? document.getElementById("signin-mfa-code").value.trim() : "";
+      const btn = document.getElementById("btn-submit-signin");
+
+      if (!email || !password) {
+        errBox.innerText = "Please enter both email address and password.";
+        errBox.className = "p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Signing In...';
+
+      try {
+        const res = await fetch("/api/v1/auth/sign-in", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password, code: code || undefined })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          if (data.mfaRequired) {
+            document.getElementById("signin-mfa-group").classList.remove("hidden");
+            document.getElementById("signin-mfa-code").focus();
+            errBox.innerText = data.message;
+            errBox.className = "p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs";
+            errBox.classList.remove("hidden");
+            btn.disabled = false;
+            btn.innerHTML = 'Verify &amp; Sign In';
+            return;
+          }
+
+          localStorage.removeItem("sidequest_logged_out");
+          if (data.token) {
+            localStorage.setItem("sidequest_token", data.token);
+            fetchHeaders["Authorization"] = "Bearer " + data.token;
+          }
+          delete fetchHeaders["X-Dev-User-Id"];
+          delete fetchHeaders["X-Dev-Role"];
+          delete fetchHeaders["X-Dev-Org-Id"];
+
+          document.getElementById("signin-modal").remove();
+          await loadUserProfile();
+          await loadStats();
+          await loadOpportunities();
+        } else {
+          errBox.innerText = data.error || "Authentication failed.";
+          errBox.className = "p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs";
+          errBox.classList.remove("hidden");
+        }
+      } catch (e) {
+        errBox.innerText = e.message;
+        errBox.className = "p-2.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs";
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In';
+      }
     }
 
     function openModal(id) {
