@@ -1,4 +1,4 @@
-CREATE TABLE `two_factors` (
+CREATE TABLE IF NOT EXISTS `two_factors` (
 	`id` text PRIMARY KEY NOT NULL,
 	`secret` text NOT NULL,
 	`backup_codes` text NOT NULL,

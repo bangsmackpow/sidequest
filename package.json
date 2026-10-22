@@ -18,6 +18,12 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  },
   "dependencies": {
     "better-auth": "^1.7.12",
     "drizzle-orm": "^0.45.4",
