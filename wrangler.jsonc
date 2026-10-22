@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "sidequest-db",
-      "database_id": "00000000-0000-0000-0000-000000000001",
+      "database_id": "ad0afffd-5698-461e-bef4-c4be7e51bc0f",
       "migrations_dir": "drizzle"
     }
   ],
@@ -27,11 +27,11 @@
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "00000000000000000000000000000001"
+      "id": "b60aaeb5488f4e80b85e3fd6ef5477e2"
     }
   ],
 
-  // Cloudflare Cron Scheduled Triggers
+  // Cloudflare Cron Scheduled Triggers (every 30 mins)
   "triggers": {
     "crons": ["*/30 * * * *"]
   },
@@ -43,7 +43,7 @@
 
   // Non-secret environment variables
   "vars": {
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "BETTER_AUTH_URL": "http://localhost:8787",
     "INBOUND_EMAIL_DOMAIN": "capture.sdvosb-proposals.mil"
   }
