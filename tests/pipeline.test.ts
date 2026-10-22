@@ -1,9 +1,8 @@
-import { test, describe, before } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert";
 import { SamGovClient } from "../src/services/sam-api";
 import { RfiGenerator } from "../src/services/rfi-generator";
 import { StorageService } from "../src/services/storage";
-import { handleInboundEmail } from "../src/workers/email";
 
 // Mock R2 Bucket for unit testing
 class MockR2Bucket {
@@ -74,6 +73,7 @@ describe("SDVOSB Pipeline & Ingestion Engine Tests", () => {
     };
 
     const result = await generator.generateAndStore(opp, {
+      templateType: "sources_sought",
       companyName: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
       uei: "VET876543210",
       cageCode: "9ABC4",
@@ -89,9 +89,62 @@ describe("SDVOSB Pipeline & Ingestion Engine Tests", () => {
     assert.ok(result.preview.includes("VET876543210"));
     assert.ok(result.preview.includes("13 CFR § 125.6"));
     assert.ok(result.preview.includes("Zero Trust, FedRAMP"));
+    assert.ok(result.html.includes("<!DOCTYPE html>"));
 
     // Verify written to mock R2
     const saved = await storage.getObject(result.r2Key);
     assert.ok(saved);
+  });
+
+  test("RfiGenerator creates Simplified Acquisition Threshold (< $250k) Quote", async () => {
+    const generator = new RfiGenerator(storage);
+    const opp = {
+      id: "36C10B26Q0188",
+      solicitationNumber: "36C10B26Q0188",
+      title: "Cloud Infrastructure DevSecOps Support - Simplified Acquisition",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+      naicsCode: "541519",
+      setAsideCode: "SDVOSBC",
+    };
+
+    const result = await generator.generateAndStore(opp, {
+      templateType: "sat_quote",
+      companyName: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
+      uei: "VET876543210",
+      cageCode: "9ABC4",
+      sdvosbCertified: true,
+      coreCompetencies: "Kubernetes, DevSecOps, Cloud Automation",
+      pastPerformance: "VA Medical Center API Integration",
+      proposedPrice: 195000,
+      deliveryTimelineDays: 30,
+    });
+
+    assert.ok(result.preview.includes("SIMPLIFIED ACQUISITION QUOTE"));
+    assert.ok(result.preview.includes("$195,000.00"));
+    assert.ok(result.preview.includes("FAR Part 13"));
+    assert.ok(result.preview.includes("30 days of award"));
+  });
+
+  test("RfiGenerator creates Past Performance Relevancy Matrix", async () => {
+    const generator = new RfiGenerator(storage);
+    const opp = {
+      id: "VA-26-R-0891",
+      solicitationNumber: "VA-26-R-0891",
+      title: "Predictive Healthcare Analytics & Machine Learning Support",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+    };
+
+    const result = await generator.generateAndStore(opp, {
+      templateType: "past_performance_matrix",
+      companyName: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
+      uei: "VET876543210",
+      cageCode: "9ABC4",
+      sdvosbCertified: true,
+      coreCompetencies: "Machine Learning, Analytics",
+      pastPerformance: "VA Suicide Prevention Analytics ($2.1M)",
+    });
+
+    assert.ok(result.preview.includes("PAST PERFORMANCE MATRIX"));
+    assert.ok(result.preview.includes("CPARS"));
   });
 });

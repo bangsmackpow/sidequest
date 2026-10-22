@@ -1,4 +1,4 @@
-import { Context, Next } from "hono";
+import { Context, Next, MiddlewareHandler } from "hono";
 import { createAuth } from "./index";
 import { createDb } from "../db";
 import { members, organizations } from "../db/schema";
@@ -12,7 +12,7 @@ declare module "hono" {
   }
 }
 
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export const authMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   const db = createDb(c.env.DB);
   c.set("db", db);
 
@@ -117,8 +117,8 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 }
 
-export function requireRole(allowedRoles: ("admin" | "manager" | "member")[]) {
-  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+export function requireRole(allowedRoles: ("admin" | "manager" | "member")[]): MiddlewareHandler<{ Bindings: Env }> {
+  return async (c, next) => {
     const auth = c.get("auth");
     if (!auth) {
       return c.json({ error: "Unauthorized" }, 401);

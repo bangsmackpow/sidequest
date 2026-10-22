@@ -1,0 +1,358 @@
+import { createDb } from "./index";
+import {
+  users,
+  organizations,
+  members,
+  savedSearchProfiles,
+  capabilityStatements,
+  opportunities,
+  opportunityNotes,
+  opportunityAlerts,
+  opportunityAttachments,
+} from "./schema";
+import { StorageService } from "../services/storage";
+import { sql } from "drizzle-orm";
+
+export async function seedDatabase(d1: D1Database, bucket?: R2Bucket) {
+  const db = createDb(d1);
+  const storage = bucket ? new StorageService(bucket) : null;
+
+  console.log("[Seed] Initializing SDVOSB multi-tenant demonstration data...");
+
+  // 1. Create Organization
+  const orgId = "org_demo_sdvosb";
+  await db
+    .insert(organizations)
+    .values({
+      id: orgId,
+      name: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
+      slug: "valiant-defense-sdvosb",
+      logo: null,
+      metadata: JSON.stringify({
+        sbaCertification: "SDVOSB-2024-CERT-8841",
+        vetCertStatus: "Verified",
+        headquarters: "Reston, VA",
+      }),
+    })
+    .onConflictDoNothing();
+
+  // 2. Create Users & Memberships
+  const seedUsers = [
+    {
+      id: "user_curtis_admin",
+      name: "Curtis (Capture Executive)",
+      email: "curtis@valiantdefense.mil",
+      role: "admin" as const,
+    },
+    {
+      id: "user_marcus_mgr",
+      name: "Marcus Vance (Proposal Director)",
+      email: "m.vance@valiantdefense.mil",
+      role: "manager" as const,
+    },
+    {
+      id: "user_sarah_member",
+      name: "Sarah Miller (Capture Analyst)",
+      email: "s.miller@valiantdefense.mil",
+      role: "member" as const,
+    },
+  ];
+
+  for (const u of seedUsers) {
+    await db
+      .insert(users)
+      .values({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        emailVerified: true,
+      })
+      .onConflictDoNothing();
+
+    await db
+      .insert(members)
+      .values({
+        id: `mem_${u.id}`,
+        organizationId: orgId,
+        userId: u.id,
+        role: u.role,
+      })
+      .onConflictDoNothing();
+  }
+
+  // 3. Create Capability Statement
+  const capId = "cap_master_sdvosb_cyber";
+  await db
+    .insert(capabilityStatements)
+    .values({
+      id: capId,
+      organizationId: orgId,
+      title: "Master SDVOSB Enterprise Cloud & Zero Trust Cyber Profile",
+      dunsUei: "VET876543210",
+      cageCode: "9ABC4",
+      sdvosbCertified: true,
+      coreCompetencies: `- **Zero Trust Architecture (ZTA):** NIST SP 800-207, ICAM, and micro-segmentation for Defense Health clinical networks.
+- **Enterprise GovCloud & DevSecOps:** Automated AWS/Azure GovCloud CI/CD pipelines compliant with DoD IL5/IL6.
+- **Continuous Cyber Defense:** CMMC Level 2, NIST SP 800-171, and SIEM security automation.`,
+      pastPerformance: `### Contract 1: Defense Health Enterprise DevSecOps
+- **Agency:** Defense Health Agency (DHA) | Contract: HT0011-23-C-0019
+- **Value:** $4,200,000 (Prime SDVOSB) | CPARS: Exceptional
+
+### Contract 2: VA Medical Center Interoperability Gateway
+- **Agency:** Department of Veterans Affairs (VA) | Contract: 36C10B24C0082
+- **Value:** $2,100,000 (Prime SDVOSB) | CPARS: Exceptional`,
+    })
+    .onConflictDoNothing();
+
+  // 4. Create Saved Search Profiles
+  const profiles = [
+    {
+      id: "prof_dha_va_healthit",
+      name: "DHA & VA Health IT (Simplified Acquisition Focus)",
+      naicsCodes: JSON.stringify(["541512", "541519"]),
+      setAsides: JSON.stringify(["SDVOSBC", "VOSBC"]),
+      noticeTypes: JSON.stringify(["r", "o"]),
+      maxValue: 250000, // SAT Threshold
+      active: true,
+    },
+    {
+      id: "prof_zero_trust_dod",
+      name: "DoD Zero Trust Architecture & DevSecOps",
+      naicsCodes: JSON.stringify(["541512", "541511"]),
+      setAsides: JSON.stringify(["SDVOSBC"]),
+      noticeTypes: JSON.stringify(["r"]),
+      maxValue: null,
+      active: true,
+    },
+  ];
+
+  for (const p of profiles) {
+    await db
+      .insert(savedSearchProfiles)
+      .values({
+        id: p.id,
+        organizationId: orgId,
+        name: p.name,
+        naicsCodes: p.naicsCodes,
+        setAsides: p.setAsides,
+        noticeTypes: p.noticeTypes,
+        pscCodes: "[]",
+        maxValue: p.maxValue,
+        active: p.active,
+      })
+      .onConflictDoNothing();
+  }
+
+  // 5. Create Realistic SDVOSB Opportunities across all Kanban stages
+  const oppData = [
+    {
+      id: "sam-sdvosb-9901-cyber",
+      solicitationNumber: "HT0011-26-R-0042",
+      title: "Enterprise Cybersecurity Zero Trust Architecture Implementation",
+      agency: "DEPARTMENT OF DEFENSE",
+      subTier: "DEFENSE HEALTH AGENCY",
+      office: "DHA FALLS CHURCH VA",
+      postedDate: new Date(Date.now() - 2 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() + 12 * 86400000).toISOString(),
+      naicsCode: "541512",
+      setAsideCode: "SDVOSBC",
+      noticeType: "r",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9901-cyber/view",
+      pointOfContactEmail: "co.defensehealth@dha.mil",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9901-cyber.json",
+      status: "new",
+    },
+    {
+      id: "sam-sdvosb-9904-telehealth",
+      solicitationNumber: "36C24226Q0319",
+      title: "Veterans Telehealth Remote Patient Monitoring Infrastructure Modernization",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+      subTier: "VETERANS INTEGRATED SERVICE NETWORK 2",
+      office: "242-NETWORK CONTRACT OFFICE 02",
+      postedDate: new Date(Date.now() - 1 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() + 18 * 86400000).toISOString(),
+      naicsCode: "541512",
+      setAsideCode: "SDVOSBC",
+      noticeType: "r",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9904-telehealth/view",
+      pointOfContactEmail: "visn2.contracting@va.gov",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9904-telehealth.json",
+      status: "new",
+    },
+    {
+      id: "sam-sdvosb-9902-sat-cloud",
+      solicitationNumber: "36C10B26Q0188",
+      title: "Cloud Infrastructure DevSecOps Support - Simplified Acquisition ($195k)",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+      subTier: "VETERANS HEALTH ADMINISTRATION",
+      office: "OIT AUSTIN AUTOMATION CENTER",
+      postedDate: new Date(Date.now() - 4 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() + 5 * 86400000).toISOString(),
+      naicsCode: "541519",
+      setAsideCode: "SDVOSBC",
+      noticeType: "o",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9902-sat-cloud/view",
+      pointOfContactEmail: "sarah.jenkins.va@va.gov",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9902-sat-cloud.json",
+      status: "reviewing_sow",
+    },
+    {
+      id: "sam-sdvosb-9905-fhir",
+      solicitationNumber: "HT0011-26-Q-0089",
+      title: "Fast Healthcare Interoperability Resources (FHIR) API Gateway Engineering",
+      agency: "DEPARTMENT OF DEFENSE",
+      subTier: "DEFENSE HEALTH AGENCY",
+      office: "DHA AURORA CO",
+      postedDate: new Date(Date.now() - 6 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() + 9 * 86400000).toISOString(),
+      naicsCode: "541511",
+      setAsideCode: "SDVOSBC",
+      noticeType: "o",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9905-fhir/view",
+      pointOfContactEmail: "dha.fhir.co@dha.mil",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9905-fhir.json",
+      status: "reviewing_sow",
+    },
+    {
+      id: "sam-sdvosb-9903-ai-analytics",
+      solicitationNumber: "VA-26-R-0891",
+      title: "Predictive Healthcare Analytics & Machine Learning Support",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+      subTier: "STRATEGIC ACQUISITION CENTER (SAC)",
+      office: "SAC FREDERICK MD",
+      postedDate: new Date(Date.now() - 8 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() + 8 * 86400000).toISOString(),
+      naicsCode: "541511",
+      setAsideCode: "SDVOSBC",
+      noticeType: "r",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9903-ai-analytics/view",
+      pointOfContactEmail: "sac.contracting@va.gov",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9903-ai-analytics.json",
+      status: "drafting_rfi",
+    },
+    {
+      id: "sam-sdvosb-9906-cmmc",
+      solicitationNumber: "SP4709-26-Q-0055",
+      title: "DoD CMMC Level 2 Readiness & Continuous Vulnerability Monitoring",
+      agency: "DEFENSE LOGISTICS AGENCY",
+      subTier: "DLA INFORMATION OPERATIONS",
+      office: "DLA CONTRACTING SERVICES PHILADELPHIA",
+      postedDate: new Date(Date.now() - 15 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() - 1 * 86400000).toISOString(),
+      naicsCode: "541519",
+      setAsideCode: "SDVOSBC",
+      noticeType: "o",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9906-cmmc/view",
+      pointOfContactEmail: "dla.cmmc.ko@dla.mil",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9906-cmmc.json",
+      status: "submitted",
+    },
+    {
+      id: "sam-sdvosb-9907-cloud-mig",
+      solicitationNumber: "FA4890-25-C-0021",
+      title: "Air Force Cyber Defense Cloud Migration Task Order (Simplified Acquisition)",
+      agency: "DEPARTMENT OF DEFENSE",
+      subTier: "DEPARTMENT OF THE AIR FORCE",
+      office: "AIR COMBAT COMMAND ACC CONS",
+      postedDate: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
+      responseDeadline: new Date(Date.now() - 10 * 86400000).toISOString(),
+      naicsCode: "541512",
+      setAsideCode: "SDVOSBC",
+      noticeType: "o",
+      uiLink: "https://sam.gov/opp/sam-sdvosb-9907-cloud-mig/view",
+      pointOfContactEmail: "acc.cons@us.af.mil",
+      rawJsonR2Key: "raw/opportunities/sam-sdvosb-9907-cloud-mig.json",
+      status: "won",
+    },
+  ];
+
+  for (const opp of oppData) {
+    await db
+      .insert(opportunities)
+      .values(opp)
+      .onConflictDoNothing();
+
+    // If storage is provided, save raw JSON to mock R2
+    if (storage) {
+      await storage.saveRawOpportunityJson(opp.id, opp);
+    }
+  }
+
+  // 6. Seed Inbound Contracting Officer correspondence & capture notes
+  const notesData = [
+    {
+      id: "note_co_dha_update",
+      opportunityId: "sam-sdvosb-9901-cyber",
+      authorEmail: "Maj. Marcus Bennett (KO) <co.defensehealth@dha.mil>",
+      subject: "RE: Sources Sought HT0011-26-R-0042 - Industry Clarifications",
+      content: `Good afternoon Industry Partners,
+
+We have received several inquiries regarding the required facility security clearance. Please be advised that an active Secret clearance is mandatory at the time of award, and Top Secret clearance eligibility is desired for key personnel. Responses remain due on the posted deadline.
+
+Respectfully,
+Maj. Marcus Bennett
+Contracting Officer, Defense Health Agency`,
+      source: "email",
+    },
+    {
+      id: "note_strategy_cyber",
+      opportunityId: "sam-sdvosb-9901-cyber",
+      authorEmail: "curtis@valiantdefense.mil",
+      subject: "Capture Strategy: Teaming & Past Performance Positioning",
+      content: `Our DHA CPARS ratings from the HT0011-23-C-0019 contract position us as an undisputed Tier-1 prime candidate. We will highlight our 100% veteran-staffed Zero Trust engineering cell and FAR 52.219-27 compliance.`,
+      source: "user",
+    },
+    {
+      id: "note_co_va_sat",
+      opportunityId: "sam-sdvosb-9902-sat-cloud",
+      authorEmail: "Sarah Jenkins, Contract Specialist <sarah.jenkins.va@va.gov>",
+      subject: "Solicitation 36C10B26Q0188 - Simplified Acquisition Threshold Notice",
+      content: `This commercial item acquisition is 100% set aside for SDVOSBs under FAR 13.5 simplified acquisition threshold procedures ($195,000 ceiling). Quotes must include your active SAM.gov UEI and SBA VetCert verification.`,
+      source: "email",
+    },
+  ];
+
+  for (const note of notesData) {
+    await db
+      .insert(opportunityNotes)
+      .values({
+        id: note.id,
+        opportunityId: note.opportunityId,
+        organizationId: orgId,
+        authorEmail: note.authorEmail,
+        subject: note.subject,
+        content: note.content,
+        source: note.source,
+      })
+      .onConflictDoNothing();
+  }
+
+  // 7. Seed Attachments
+  const attachmentsData = [
+    {
+      id: "att_sow_9901",
+      opportunityId: "sam-sdvosb-9901-cyber",
+      filename: "PWS_Zero_Trust_Architecture_v1.2.pdf",
+      r2Key: "attachments/sam-sdvosb-9901-cyber/PWS_Zero_Trust_Architecture_v1.2.pdf",
+      contentType: "application/pdf",
+      parsedText: "Performance Work Statement for Defense Health Agency Zero Trust Architecture Implementation.",
+    },
+    {
+      id: "att_rfq_9902",
+      opportunityId: "sam-sdvosb-9902-sat-cloud",
+      filename: "RFQ_36C10B26Q0188_Cloud_DevSecOps.pdf",
+      r2Key: "attachments/sam-sdvosb-9902-sat-cloud/RFQ_36C10B26Q0188_Cloud_DevSecOps.pdf",
+      contentType: "application/pdf",
+      parsedText: "Request for Quotation for VA Austin Automation Center Cloud DevSecOps Support under FAR Part 13.",
+    },
+  ];
+
+  for (const att of attachmentsData) {
+    await db
+      .insert(opportunityAttachments)
+      .values(att)
+      .onConflictDoNothing();
+  }
+
+  console.log("[Seed] Demonstration data successfully loaded!");
+}

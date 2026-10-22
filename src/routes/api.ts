@@ -11,9 +11,10 @@ import {
 } from "../db/schema";
 import { eq, and, like, desc, sql, gte, lte } from "drizzle-orm";
 import { StorageService } from "../services/storage";
-import { RfiGenerator } from "../services/rfi-generator";
+import { RfiGenerator, ProposalTemplateType } from "../services/rfi-generator";
 import { runSamIngestion } from "../workers/ingest";
 import { handleInboundEmail } from "../workers/email";
+import { seedDatabase } from "../db/seed";
 
 export const apiRouter = new Hono<{ Bindings: Env }>();
 
@@ -31,11 +32,17 @@ apiRouter.get("/stats", async (c) => {
     .select({ count: sql<number>`count(*)` })
     .from(opportunities)
     .where(eq(opportunities.status, "new"));
+  const [reviewingCount] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(opportunities)
+    .where(
+      sql`${opportunities.status} IN ('reviewing_sow', 'analyzing')`
+    );
   const [draftingCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(opportunities)
     .where(
-      sql`${opportunities.status} IN ('drafting_rfi', 'pursuing', 'reviewing_sow', 'analyzing')`
+      sql`${opportunities.status} IN ('drafting_rfi', 'pursuing')`
     );
   const [submittedCount] = await db
     .select({ count: sql<number>`count(*)` })
@@ -54,6 +61,7 @@ apiRouter.get("/stats", async (c) => {
   return c.json({
     totalOpportunities: totalCount?.count || 0,
     newOpportunities: newCount?.count || 0,
+    reviewingOpportunities: reviewingCount?.count || 0,
     activeProposals: draftingCount?.count || 0,
     submittedProposals: submittedCount?.count || 0,
     wonContracts: wonCount?.count || 0,
@@ -66,7 +74,7 @@ apiRouter.get("/stats", async (c) => {
 // 2. Opportunities Endpoints
 // ==========================================
 
-// GET /api/v1/opportunities (Filterable by NAICS, set-aside, status, deadline, query)
+// GET /api/v1/opportunities (Filterable by NAICS, set-aside, status, deadline, query, SAT)
 apiRouter.get("/opportunities", async (c) => {
   const db = c.get("db");
   const naics = c.req.query("naics");
@@ -74,6 +82,7 @@ apiRouter.get("/opportunities", async (c) => {
   const status = c.req.query("status");
   const deadlineBefore = c.req.query("deadline_before");
   const deadlineAfter = c.req.query("deadline_after");
+  const isSat = c.req.query("is_sat") === "true";
   const query = c.req.query("q");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 200);
   const offset = parseInt(c.req.query("offset") || "0", 10);
@@ -95,9 +104,14 @@ apiRouter.get("/opportunities", async (c) => {
   if (deadlineAfter) {
     conditions.push(gte(opportunities.responseDeadline, deadlineAfter));
   }
+  if (isSat) {
+    conditions.push(
+      sql`(${opportunities.title} LIKE '%Simplified Acquisition%' OR ${opportunities.title} LIKE '%SAT%' OR ${opportunities.solicitationNumber} LIKE '%Q%')`
+    );
+  }
   if (query) {
     conditions.push(
-      sql`(${opportunities.title} LIKE ${`%${query}%`} OR ${opportunities.solicitationNumber} LIKE ${`%${query}%`} OR ${opportunities.agency} LIKE ${`%${query}%`})`
+      sql`(${opportunities.title} LIKE ${`%${query}%`} OR ${opportunities.solicitationNumber} LIKE ${`%${query}%`} OR ${opportunities.agency} LIKE ${`%${query}%`} OR ${opportunities.office} LIKE ${`%${query}%`})`
     );
   }
 
@@ -243,6 +257,7 @@ apiRouter.post("/opportunities/:id/generate-rfi", async (c) => {
   const auth = c.get("auth");
   const body = await c.req.json<{
     capabilityStatementId?: string;
+    templateType?: ProposalTemplateType;
     companyName?: string;
     uei?: string;
     cageCode?: string;
@@ -254,6 +269,8 @@ apiRouter.post("/opportunities/:id/generate-rfi", async (c) => {
     pocPhone?: string;
     customApproach?: string;
     subcontractingPlan?: string;
+    proposedPrice?: number;
+    deliveryTimelineDays?: number;
   }>();
 
   const [opp] = await db
@@ -321,11 +338,14 @@ apiRouter.post("/opportunities/:id/generate-rfi", async (c) => {
     sdvosbCertified,
     coreCompetencies,
     pastPerformance,
+    templateType: body.templateType || "sources_sought",
     pocName: body.pocName || auth?.user?.name || "Director of Capture",
     pocEmail: body.pocEmail || auth?.user?.email || "capture@sdvosb-proposals.mil",
     pocPhone: body.pocPhone || "(555) 789-0123",
     customApproach: body.customApproach,
     subcontractingPlan: body.subcontractingPlan,
+    proposedPrice: body.proposedPrice,
+    deliveryTimelineDays: body.deliveryTimelineDays,
   });
 
   // Record generated proposal into opportunity_attachments table
@@ -356,8 +376,8 @@ apiRouter.post("/opportunities/:id/generate-rfi", async (c) => {
     opportunityId: opp.id,
     organizationId: auth?.organizationId || null,
     authorEmail: auth?.user?.email || "capture-engine@sdvosb-proposals.mil",
-    subject: `Generated SDVOSB RFI Response (${result.filename})`,
-    content: `Generated comprehensive Sources Sought / RFI proposal response tailored to Section L requirements. Archived in R2 at ${result.r2Key}.`,
+    subject: `Generated Proposal Artifact (${result.filename})`,
+    content: `Generated proposal (${body.templateType || "sources_sought"}) tailored to government requirements. Archived in R2 at ${result.r2Key}.`,
     source: "user",
   });
 
@@ -367,6 +387,7 @@ apiRouter.post("/opportunities/:id/generate-rfi", async (c) => {
     r2Key: result.r2Key,
     filename: result.filename,
     preview: result.preview,
+    html: result.html,
   });
 });
 
@@ -375,6 +396,7 @@ apiRouter.get("/opportunities/:id/attachments/:attachmentId/download", async (c)
   const db = c.get("db");
   const id = c.req.param("id");
   const attachmentId = c.req.param("attachmentId");
+  const format = c.req.query("format");
 
   const [att] = await db
     .select()
@@ -486,6 +508,39 @@ apiRouter.post("/saved-search-profiles", requireRole(["admin", "manager"]), asyn
   return c.json({ success: true, id }, 201);
 });
 
+apiRouter.patch("/saved-search-profiles/:id", requireRole(["admin", "manager"]), async (c) => {
+  const db = c.get("db");
+  const id = c.req.param("id") as string;
+  const body = await c.req.json<{
+    name?: string;
+    naicsCodes?: string[];
+    setAsides?: string[];
+    active?: boolean;
+    maxValue?: number;
+  }>();
+
+  const updateFields: any = {
+    updatedAt: sql`(datetime('now'))`,
+  };
+
+  if (body.name !== undefined) updateFields.name = body.name;
+  if (body.naicsCodes !== undefined) updateFields.naicsCodes = JSON.stringify(body.naicsCodes);
+  if (body.setAsides !== undefined) updateFields.setAsides = JSON.stringify(body.setAsides);
+  if (body.active !== undefined) updateFields.active = body.active;
+  if (body.maxValue !== undefined) updateFields.maxValue = body.maxValue;
+
+  await db.update(savedSearchProfiles).set(updateFields).where(eq(savedSearchProfiles.id, id));
+
+  return c.json({ success: true, id });
+});
+
+apiRouter.delete("/saved-search-profiles/:id", requireRole(["admin"]), async (c) => {
+  const db = c.get("db");
+  const id = c.req.param("id") as string;
+  await db.delete(savedSearchProfiles).where(eq(savedSearchProfiles.id, id));
+  return c.json({ success: true, id });
+});
+
 // ==========================================
 // 4. Capability Statements CRUD
 // ==========================================
@@ -535,9 +590,25 @@ apiRouter.post("/capability-statements", requireRole(["admin", "manager"]), asyn
   return c.json({ success: true, id }, 201);
 });
 
+apiRouter.delete("/capability-statements/:id", requireRole(["admin"]), async (c) => {
+  const db = c.get("db");
+  const id = c.req.param("id") as string;
+  await db.delete(capabilityStatements).where(eq(capabilityStatements.id, id));
+  return c.json({ success: true, id });
+});
+
 // ==========================================
-// 5. Ingestion & Email Trigger Tools
+// 5. Ingestion, Seeding & Email Trigger Tools
 // ==========================================
+
+// POST /api/v1/seed (Initializes realistic SDVOSB opportunities, profiles, and communications)
+apiRouter.post("/seed", requireRole(["admin"]), async (c) => {
+  await seedDatabase(c.env.DB, c.env.BUCKET);
+  return c.json({
+    success: true,
+    message: "Successfully seeded multi-tenant SDVOSB opportunities, profiles, and capability records.",
+  });
+});
 
 // POST /api/v1/ingest/run (Manual trigger for polling SAM.gov)
 apiRouter.post("/ingest/run", requireRole(["admin", "manager"]), async (c) => {
