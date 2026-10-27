@@ -21,6 +21,13 @@ export interface SamGovNotice {
   description?: string;
   award?: {
     amount?: number;
+    date?: string;
+    number?: string;
+    awardee?: {
+      name?: string;
+      ueiSAM?: string;
+      cageCode?: string;
+    };
   };
 }
 
@@ -29,8 +36,9 @@ export interface SamSearchParams {
   postedFrom: string; // MM/dd/yyyy
   postedTo: string; // MM/dd/yyyy
   limit?: number;
-  ptype?: string; // e.g. "r,o"
+  ptype?: string; // e.g. "p,r,k,o,s,a"
   typeOfSetAside?: string; // e.g. "SDVOSBC"
+  naicsCode?: string;
   offset?: number;
 }
 
@@ -76,6 +84,9 @@ export class SamGovClient {
       }
       if (params.typeOfSetAside) {
         url.searchParams.set("typeOfSetAside", params.typeOfSetAside);
+      }
+      if (params.naicsCode) {
+        url.searchParams.set("ncode", params.naicsCode);
       }
 
       const res = await fetch(url.toString(), {
@@ -147,6 +158,15 @@ export class SamGovClient {
             type: "primary",
             phone: "703-555-0199",
           },
+          {
+            email: "osdbu.advocate@dha.mil",
+            fullName: "elena.rostova@dha.mil (OSDBU Small Business Specialist)",
+            type: "secondary",
+            phone: "703-555-0140",
+          },
+        ],
+        resourceLinks: [
+          "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/PWS_Zero_Trust_DHA_2026.pdf",
         ],
         description: "Sources Sought notice to identify SDVOSB firms capable of deploying Zero Trust architecture across clinical health networks. Response requires capability statement and past performance matrix.",
       },
@@ -161,7 +181,7 @@ export class SamGovClient {
         responseDeadLine: new Date(Date.now() + 7 * 86400000).toISOString(),
         naicsCode: "541519",
         typeOfSetAside: "SDVOSBC",
-        type: "o", // Solicitation / Combined Synopsis
+        type: "k", // Combined Synopsis / Solicitation (FAR Part 12/13 SAT)
         uiLink: "https://sam.gov/opp/sam-sdvosb-9902-sat-cloud/view",
         pointOfContact: [
           {
@@ -171,7 +191,10 @@ export class SamGovClient {
             phone: "512-555-0143",
           },
         ],
-        description: "Commercial item simplified acquisition ($195,000 threshold) set aside 100% for Service-Disabled Veteran-Owned Small Businesses. Kubernetes and Terraform automation.",
+        resourceLinks: [
+          "https://sam.gov/api/prod/opps/v3/opportunities/resources/files/RFQ_36C10B26Q0188_SOW.pdf",
+        ],
+        description: "Commercial item combined synopsis/solicitation ($195,000 threshold) set aside 100% for Service-Disabled Veteran-Owned Small Businesses. Kubernetes and Terraform automation.",
       },
       {
         noticeId: "sam-sdvosb-9903-ai-analytics",
@@ -195,6 +218,91 @@ export class SamGovClient {
           },
         ],
         description: "RFI: Seeking SDVOSB vendor capabilities for predictive clinical outcomes modeling and veteran suicide prevention data engineering pipelines.",
+      },
+      {
+        noticeId: "sam-sdvosb-9908-rule-of-two",
+        title: "Tactical Edge Cloud & Automated Telemetry Pipeline (Market Research)",
+        solicitationNumber: "W15P7T-26-R-0114",
+        department: "DEPT OF DEFENSE",
+        subTier: "DEPT OF THE ARMY",
+        office: "W6QK ACC-APG ABERDEEN PROVING GROUND",
+        postedDate: new Date().toISOString().split("T")[0],
+        responseDeadLine: new Date(Date.now() + 10 * 86400000).toISOString(),
+        naicsCode: "541512",
+        typeOfSetAside: "SBA", // Currently Total Small Business — prime target for SDVOSB Rule-of-Two conversion!
+        type: "r", // Sources Sought
+        uiLink: "https://sam.gov/opp/sam-sdvosb-9908-rule-of-two/view",
+        pointOfContact: [
+          {
+            email: "army.apg.contracting@army.mil",
+            fullName: "Capt. David Thorne (KO)",
+            type: "primary",
+            phone: "410-555-0188",
+          },
+          {
+            email: "apg.osbp@army.mil",
+            fullName: "Marcus Sterling (Army OSBP Small Business Advisor)",
+            type: "secondary",
+            phone: "410-555-0192",
+          },
+        ],
+        description: "Sources Sought Notice for market research. The Government is evaluating whether to set this acquisition aside for Service-Disabled Veteran-Owned Small Businesses (SDVOSB) under FAR 19.1405 Rule of Two if two or more qualified SDVOSBs respond.",
+      },
+      {
+        noticeId: "sam-sdvosb-9909-sole-source",
+        title: "Special Notice: Intent to Sole Source SDVOSB Cyber Rapid Response (FAR 19.1406)",
+        solicitationNumber: "36C10B26N0401",
+        department: "VETERANS AFFAIRS, DEPARTMENT OF",
+        subTier: "TECHNOLOGY ACQUISITION CENTER (TAC)",
+        office: "TAC EATONTOWN NJ",
+        postedDate: new Date().toISOString().split("T")[0],
+        responseDeadLine: new Date(Date.now() + 5 * 86400000).toISOString(),
+        naicsCode: "541519",
+        typeOfSetAside: "SDVOSBS",
+        type: "s", // Special Notice / Sole Source Intent
+        uiLink: "https://sam.gov/opp/sam-sdvosb-9909-sole-source/view",
+        pointOfContact: [
+          {
+            email: "tac.solesource@va.gov",
+            fullName: "Diana Vance, Senior Contracting Officer",
+            type: "primary",
+            phone: "732-555-0164",
+          },
+        ],
+        description: "Notice of Intent to award a Sole Source SDVOSB contract under VAAR 819.7007 / FAR 19.1406 ($3.8M ceiling) for rapid vulnerability remediation.",
+      },
+      {
+        noticeId: "sam-sdvosb-9910-award-notice",
+        title: "AWARD NOTICE: Enterprise EHR Data Migration & Cloud Security Support",
+        solicitationNumber: "36C10B25C0911",
+        department: "VETERANS AFFAIRS, DEPARTMENT OF",
+        subTier: "VETERANS HEALTH ADMINISTRATION",
+        office: "STRATEGIC ACQUISITION CENTER",
+        postedDate: new Date().toISOString().split("T")[0],
+        responseDeadLine: new Date(Date.now() + 365 * 86400000).toISOString(),
+        naicsCode: "541512",
+        typeOfSetAside: "SDVOSBC",
+        type: "a", // Award Notice
+        uiLink: "https://sam.gov/opp/sam-sdvosb-9910-award-notice/view",
+        pointOfContact: [
+          {
+            email: "sac.awards@va.gov",
+            fullName: "Thomas Wright, Contracting Officer",
+            type: "primary",
+            phone: "540-555-0122",
+          },
+        ],
+        award: {
+          amount: 14850000,
+          date: new Date().toISOString().split("T")[0],
+          number: "36C10B26C0044",
+          awardee: {
+            name: "APEX FEDERAL INTEGRATORS LLC",
+            ueiSAM: "APX998877665",
+            cageCode: "7KLP2",
+          },
+        },
+        description: "Contract Award Notice ($14.85M). Prime contractor seeks additional VetCert SDVOSB subcontractors for regional VISN rollout under 13 CFR 125.6 similarly situated entity provisions.",
       },
     ];
 

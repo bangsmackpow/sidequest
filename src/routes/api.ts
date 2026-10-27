@@ -12,8 +12,15 @@ import {
 import { eq, and, like, desc, sql, gte, lte } from "drizzle-orm";
 import { StorageService } from "../services/storage";
 import { RfiGenerator, ProposalTemplateType } from "../services/rfi-generator";
+import {
+  calculateLimitationsOnSubcontracting,
+  checkNonManufacturerRule,
+  fetchHistoricalAwardIntelligence,
+  ProcurementCategory,
+} from "../services/compliance-and-intel";
 import { runSamIngestion } from "../workers/ingest";
 import { handleInboundEmail } from "../workers/email";
+import { OutboundEmailDispatcher } from "../workers/outbound-email";
 import { seedDatabase } from "../db/seed";
 import { authManagementRouter, adminUserRouter } from "./auth-management";
 
@@ -81,15 +88,17 @@ apiRouter.get("/stats", async (c) => {
 // 2. Opportunities Endpoints
 // ==========================================
 
-// GET /api/v1/opportunities (Filterable by NAICS, set-aside, status, deadline, query, SAT)
+// GET /api/v1/opportunities (Filterable by NAICS, set-aside, notice_type, status, deadline, query, SAT, rule_of_two)
 apiRouter.get("/opportunities", async (c) => {
   const db = c.get("db");
   const naics = c.req.query("naics");
   const setAside = c.req.query("set_aside");
+  const noticeType = c.req.query("notice_type");
   const status = c.req.query("status");
   const deadlineBefore = c.req.query("deadline_before");
   const deadlineAfter = c.req.query("deadline_after");
   const isSat = c.req.query("is_sat") === "true";
+  const isRuleOfTwo = c.req.query("rule_of_two") === "true";
   const query = c.req.query("q");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 200);
   const offset = parseInt(c.req.query("offset") || "0", 10);
@@ -102,6 +111,9 @@ apiRouter.get("/opportunities", async (c) => {
   if (setAside) {
     conditions.push(eq(opportunities.setAsideCode, setAside));
   }
+  if (noticeType) {
+    conditions.push(eq(opportunities.noticeType, noticeType));
+  }
   if (status) {
     conditions.push(eq(opportunities.status, status));
   }
@@ -113,7 +125,12 @@ apiRouter.get("/opportunities", async (c) => {
   }
   if (isSat) {
     conditions.push(
-      sql`(${opportunities.title} LIKE '%Simplified Acquisition%' OR ${opportunities.title} LIKE '%SAT%' OR ${opportunities.solicitationNumber} LIKE '%Q%')`
+      sql`(${opportunities.title} LIKE '%Simplified Acquisition%' OR ${opportunities.title} LIKE '%SAT%' OR ${opportunities.solicitationNumber} LIKE '%Q%' OR ${opportunities.noticeType} = 'k')`
+    );
+  }
+  if (isRuleOfTwo) {
+    conditions.push(
+      sql`(${opportunities.noticeType} = 'r' AND ${opportunities.setAsideCode} NOT IN ('SDVOSBC', 'SDVOSBS'))`
     );
   }
   if (query) {
@@ -664,3 +681,282 @@ ${body.text}`;
 
   return c.json(result);
 });
+
+// ==========================================
+// 6. Bidirectional Channel Communication (KO & OSDBU Dispatch + Contact Directory)
+// ==========================================
+
+// POST /api/v1/opportunities/:id/send-email (Dispatch capability statement, Q&A, or Rule-of-Two letter directly to KO/OSDBU)
+apiRouter.post("/opportunities/:id/send-email", async (c) => {
+  const db = c.get("db");
+  const id = c.req.param("id");
+  const auth = c.get("auth");
+  const body = await c.req.json<{
+    to?: string;
+    ccOsdbu?: string;
+    subject: string;
+    content: string;
+    markAsSubmitted?: boolean;
+  }>();
+
+  if (!body.subject || !body.content) {
+    return c.json({ error: "subject and content are required" }, 400);
+  }
+
+  const [opp] = await db
+    .select()
+    .from(opportunities)
+    .where(eq(opportunities.id, id))
+    .limit(1);
+
+  if (!opp) {
+    return c.json({ error: "Opportunity not found" }, 404);
+  }
+
+  const recipientEmail = (body.to || opp.pointOfContactEmail || "").trim();
+  if (!recipientEmail) {
+    return c.json({ error: "Recipient email address (Contracting Officer POC) is required" }, 400);
+  }
+
+  const solNumClean = (opp.solicitationNumber || opp.id).replace(/[^a-zA-Z0-9-_]/g, "");
+  const inboundDomain = c.env.INBOUND_EMAIL_DOMAIN || "sdvosb-proposals.mil";
+  const replyToAddress = `capture+${solNumClean}@${inboundDomain}`;
+
+  const recipients = [recipientEmail];
+  if (body.ccOsdbu && body.ccOsdbu.trim()) {
+    recipients.push(body.ccOsdbu.trim());
+  }
+
+  const dispatcher = new OutboundEmailDispatcher(c.env);
+  const dispatchResult = await dispatcher.send({
+    to: recipients,
+    subject: body.subject.includes(solNumClean) ? body.subject : `[${solNumClean}] ${body.subject}`,
+    text: body.content,
+    replyTo: replyToAddress,
+  });
+
+  if (!dispatchResult.success) {
+    return c.json({ error: dispatchResult.error || "Failed to dispatch email" }, 500);
+  }
+
+  // Record outbound correspondence in opportunity_notes for bidirectional audit trail
+  const noteId = crypto.randomUUID();
+  const senderEmail = auth?.user?.email || "capture-director@sdvosb-proposals.mil";
+  await db.insert(opportunityNotes).values({
+    id: noteId,
+    opportunityId: opp.id,
+    organizationId: auth?.organizationId || null,
+    authorEmail: `${senderEmail} ➔ ${recipients.join(", ")}`,
+    subject: `📤 Outbound KO/OSDBU Dispatch: ${body.subject}`,
+    content: `Dispatched to: ${recipients.join(", ")}\nReply-To Threading Address: ${replyToAddress}\nMessage ID: ${dispatchResult.messageId || "N/A"}\n\n${body.content}`,
+    source: "outbound_email",
+  });
+
+  if (body.markAsSubmitted && opp.status !== "won") {
+    await db
+      .update(opportunities)
+      .set({
+        status: "submitted",
+        updatedAt: sql`(datetime('now'))`,
+      })
+      .where(eq(opportunities.id, opp.id));
+  }
+
+  return c.json({
+    success: true,
+    messageId: dispatchResult.messageId,
+    recipients,
+    replyTo: replyToAddress,
+    noteId,
+  });
+});
+
+// GET /api/v1/contacts (Aggregated Contracting Officer, Contract Specialist & Agency OSDBU Directory)
+apiRouter.get("/contacts", async (c) => {
+  const db = c.get("db");
+
+  const allOpps = await db
+    .select()
+    .from(opportunities)
+    .orderBy(desc(opportunities.postedDate));
+
+  const pocNotes = await db
+    .select()
+    .from(opportunityNotes)
+    .where(sql`${opportunityNotes.source} IN ('poc_directory', 'email', 'outbound_email')`)
+    .orderBy(desc(opportunityNotes.createdAt));
+
+  const contactMap = new Map<
+    string,
+    {
+      email: string;
+      name: string;
+      role: string;
+      phone: string;
+      agency: string;
+      office: string;
+      solicitations: Array<{ id: string; solicitationNumber: string; title: string; status: string }>;
+    }
+  >();
+
+  for (const opp of allOpps) {
+    const email = (opp.pointOfContactEmail || "").trim().toLowerCase();
+    if (!email) continue;
+
+    if (!contactMap.has(email)) {
+      const isOsdbu = email.includes("osdbu") || email.includes("osbp") || email.includes("smallbusiness");
+      contactMap.set(email, {
+        email,
+        name: email.split("@")[0].replace(/[._]/g, " ").toUpperCase(),
+        role: isOsdbu ? "OSDBU Small Business Specialist" : "Procuring Contracting Officer (KO)",
+        phone: "See Solicitation Notice",
+        agency: opp.agency || "Federal Agency",
+        office: opp.office || opp.subTier || "Contracting Office",
+        solicitations: [],
+      });
+    }
+
+    const entry = contactMap.get(email)!;
+    if (!entry.solicitations.some((s) => s.id === opp.id)) {
+      entry.solicitations.push({
+        id: opp.id,
+        solicitationNumber: opp.solicitationNumber || opp.id,
+        title: opp.title,
+        status: opp.status,
+      });
+    }
+  }
+
+  // Enrich names & phones from parsed poc_directory / email notes
+  for (const note of pocNotes) {
+    const emailMatch = note.authorEmail.match(/<([^>]+)>/) || [null, note.authorEmail];
+    const cleanEmail = (emailMatch[1] || "").trim().toLowerCase();
+    if (cleanEmail && contactMap.has(cleanEmail)) {
+      const entry = contactMap.get(cleanEmail)!;
+      if (note.authorEmail.includes("<")) {
+        entry.name = note.authorEmail.split("<")[0].trim();
+      }
+    }
+    // Also parse structured lines from poc_directory notes
+    if (note.source === "poc_directory") {
+      const lines = note.content.split("\n");
+      for (const line of lines) {
+        const m = line.match(/^\d+\.\s+(.+?)\s+\((PRIMARY|SECONDARY)\)\s+—\s+Email:\s+([^\s|]+)\s+\|\s+Phone:\s+(.+)$/i);
+        if (m) {
+          const [, fullName, pocType, rawEmail, phone] = m;
+          const eKey = rawEmail.trim().toLowerCase();
+          if (eKey && eKey !== "n/a") {
+            const parentOpp = allOpps.find((o) => o.id === note.opportunityId);
+            const existing = contactMap.get(eKey) || {
+              email: eKey,
+              name: fullName.trim(),
+              role:
+                pocType.toUpperCase() === "SECONDARY" || fullName.toLowerCase().includes("osdbu") || fullName.toLowerCase().includes("osbp")
+                  ? "OSDBU / Small Business Specialist"
+                  : "Procuring Contracting Officer (KO)",
+              phone: phone.trim(),
+              agency: parentOpp?.agency || "Federal Agency",
+              office: parentOpp?.office || parentOpp?.subTier || "Contracting Office",
+              solicitations: [],
+            };
+            existing.name = fullName.trim();
+            existing.phone = phone.trim();
+            if (parentOpp && !existing.solicitations.some((s) => s.id === parentOpp.id)) {
+              existing.solicitations.push({
+                id: parentOpp.id,
+                solicitationNumber: parentOpp.solicitationNumber || parentOpp.id,
+                title: parentOpp.title,
+                status: parentOpp.status,
+              });
+            }
+            contactMap.set(eKey, existing);
+          }
+        }
+      }
+    }
+  }
+
+  return c.json({
+    contacts: Array.from(contactMap.values()),
+  });
+});
+
+// ==========================================
+// 7. Compliance Calculator (FAR 52.219-27 / 13 CFR 125.6) & Award Intelligence
+// ==========================================
+
+// POST /api/v1/compliance/calculate-los
+apiRouter.post("/compliance/calculate-los", async (c) => {
+  const db = c.get("db");
+  const auth = c.get("auth");
+  const body = await c.req.json<{
+    opportunityId?: string;
+    procurementType?: ProcurementCategory;
+    totalContractValue: number;
+    costOfMaterials?: number;
+    primeDirectDollars: number;
+    similarlySituatedSubDollars?: number;
+    nonSdvosbSubDollars: number;
+    naicsCode?: string;
+    saveToNotes?: boolean;
+  }>();
+
+  const losResult = calculateLimitationsOnSubcontracting({
+    procurementType: body.procurementType || "services",
+    totalContractValue: Number(body.totalContractValue || 0),
+    costOfMaterials: Number(body.costOfMaterials || 0),
+    primeDirectDollars: Number(body.primeDirectDollars || 0),
+    similarlySituatedSubDollars: Number(body.similarlySituatedSubDollars || 0),
+    nonSdvosbSubDollars: Number(body.nonSdvosbSubDollars || 0),
+  });
+
+  const nmrCheck = checkNonManufacturerRule(body.naicsCode || "541512");
+
+  if (body.opportunityId && body.saveToNotes) {
+    await db.insert(opportunityNotes).values({
+      id: crypto.randomUUID(),
+      opportunityId: body.opportunityId,
+      organizationId: auth?.organizationId || null,
+      authorEmail: auth?.user?.email || "compliance-engine@sdvosb-proposals.mil",
+      subject: `FAR 52.219-27 Subcontracting Audit: ${losResult.compliant ? "COMPLIANT ✅" : "NON-COMPLIANT ❌"} (SDVOSB Team: ${losResult.effectiveSdvosbTeamPercent}%)`,
+      content: `${losResult.sectionLNarrative}\n\n• Non-Manufacturer Rule (${nmrCheck.naicsCode}): ${nmrCheck.waiverSummary}\n• Strategy: ${nmrCheck.resellerStrategy}`,
+      source: "compliance_audit",
+    });
+  }
+
+  return c.json({
+    los: losResult,
+    nmr: nmrCheck,
+  });
+});
+
+// GET /api/v1/opportunities/:id/award-intel
+apiRouter.get("/opportunities/:id/award-intel", async (c) => {
+  const db = c.get("db");
+  const id = c.req.param("id");
+
+  const [opp] = await db
+    .select()
+    .from(opportunities)
+    .where(eq(opportunities.id, id))
+    .limit(1);
+
+  if (!opp) {
+    return c.json({ error: "Opportunity not found" }, 404);
+  }
+
+  const awardIntel = await fetchHistoricalAwardIntelligence(
+    opp.naicsCode || "541512",
+    opp.agency || "Department of Veterans Affairs"
+  );
+  const nmrCheck = checkNonManufacturerRule(opp.naicsCode || "541512");
+
+  return c.json({
+    opportunityId: opp.id,
+    solicitationNumber: opp.solicitationNumber,
+    naicsCode: opp.naicsCode,
+    awardIntelligence: awardIntel,
+    nmrWaiverStatus: nmrCheck,
+  });
+});
+

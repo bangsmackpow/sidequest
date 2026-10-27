@@ -63,6 +63,14 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
             <span>Poll SAM.gov</span>
           </button>
 
+          <button onclick="openContactsModal()" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="Contracting Officer &amp; OSDBU Directory">
+            <i class="fa-solid fa-address-book mr-1 text-cyan-400"></i>KO &amp; OSDBU
+          </button>
+
+          <button onclick="openComplianceCalculatorModal()" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="FAR 52.219-27 50% Subcontracting &amp; NMR Calculator">
+            <i class="fa-solid fa-scale-balanced mr-1 text-emerald-400"></i>50% Calc
+          </button>
+
           <button onclick="openModal('modal-profiles')" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
             <i class="fa-solid fa-sliders mr-1 text-slate-400"></i>Profiles
           </button>
@@ -409,14 +417,29 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         const card = document.createElement("div");
         card.className = "p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:shadow-lg transition space-y-2.5 cursor-pointer group";
         
-        const isSourcesSought = (opp.noticeType || "").toLowerCase() === "r" || (opp.title || "").toLowerCase().includes("sources sought");
-        const isSat = (opp.title || "").toLowerCase().includes("simplified acquisition") || 
+        const nType = (opp.noticeType || "").toLowerCase();
+        const isSourcesSought = nType === "r" || (opp.title || "").toLowerCase().includes("sources sought");
+        const isRuleOfTwoFlip = isSourcesSought && opp.setAsideCode && !["SDVOSBC", "SDVOSBS"].includes(opp.setAsideCode);
+        const isSoleSource = opp.setAsideCode === "SDVOSBS" || nType === "s";
+        const isCombinedSynopsis = nType === "k";
+        const isAwardNotice = nType === "a";
+        const isSat = isCombinedSynopsis ||
+                      (opp.title || "").toLowerCase().includes("simplified acquisition") || 
                       (opp.title || "").toLowerCase().includes("sat") || 
                       (opp.solicitationNumber || "").includes("Q");
 
-        const badgeType = isSourcesSought 
-          ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase">RFI / Sources Sought</span>'
-          : '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 uppercase">Solicitation</span>';
+        let badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 uppercase">Solicitation</span>';
+        if (isRuleOfTwoFlip) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/40 uppercase" title="Respond with 2+ SDVOSBs to flip to SDVOSBC under FAR 19.1405">🎯 Rule-of-Two Flip</span>';
+        } else if (isSoleSource) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/40 uppercase">🔒 Sole Source</span>';
+        } else if (isAwardNotice) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 uppercase">🏆 Award Notice</span>';
+        } else if (isSourcesSought) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase">RFI / Sources Sought</span>';
+        } else if (isCombinedSynopsis) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase">⚡ Combined Synopsis</span>';
+        }
 
         const satBadge = isSat
           ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded badge-sat uppercase">SAT &lt; $250k</span>'
@@ -551,19 +574,31 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       modal.id = "detail-modal";
       modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
 
-      let notesHtml = (notes || []).map(n => \`
-        <div class="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1 text-xs">
+      const sourceIconMap = {
+        email: { icon: "envelope text-blue-400", border: "border-blue-500/30 bg-blue-950/20" },
+        outbound_email: { icon: "paper-plane text-emerald-400", border: "border-emerald-500/30 bg-emerald-950/20" },
+        amendment: { icon: "triangle-exclamation text-rose-400", border: "border-rose-500/40 bg-rose-950/20" },
+        award_intel: { icon: "trophy text-amber-400", border: "border-amber-500/40 bg-amber-950/20" },
+        compliance_audit: { icon: "scale-balanced text-indigo-400", border: "border-indigo-500/40 bg-indigo-950/20" },
+        poc_directory: { icon: "address-card text-cyan-400", border: "border-cyan-500/30 bg-slate-900" },
+      };
+
+      let notesHtml = (notes || []).map(n => {
+        const style = sourceIconMap[n.source] || { icon: "user-pen text-amber-400", border: "border-slate-800 bg-slate-900" };
+        return \`
+        <div class="p-3 rounded-lg border \${style.border} space-y-1 text-xs">
           <div class="flex items-center justify-between text-slate-400">
-            <span class="font-semibold text-slate-300 flex items-center gap-1.5">
-              <i class="fa-solid fa-\${n.source === 'email' ? 'envelope text-blue-400' : 'user-pen text-amber-400'}"></i>
-              \${n.authorEmail}
+            <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+              <i class="fa-solid fa-\${style.icon}"></i>
+              \${escapeHtml(n.authorEmail)}
             </span>
             <span class="text-[10px] text-slate-500 font-mono">\${n.createdAt || ""}</span>
           </div>
-          <div class="font-medium text-slate-200">\${n.subject || ""}</div>
-          <p class="text-slate-400 whitespace-pre-wrap leading-relaxed">\${n.content}</p>
+          <div class="font-semibold text-slate-100">\${escapeHtml(n.subject || "")}</div>
+          <p class="text-slate-300 whitespace-pre-wrap leading-relaxed">\${escapeHtml(n.content)}</p>
         </div>
-      \`).join("");
+      \`;
+      }).join("");
 
       if (!notesHtml) notesHtml = '<p class="text-xs text-slate-500 italic">No notes or captured emails recorded yet.</p>';
 
@@ -571,7 +606,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         <div class="flex items-center justify-between p-2.5 rounded bg-slate-900 border border-slate-800 text-xs">
           <div class="flex items-center space-x-2 truncate">
             <i class="fa-regular fa-file-lines text-amber-400"></i>
-            <span class="truncate text-slate-200">\${a.filename}</span>
+            <span class="truncate text-slate-200">\${escapeHtml(a.filename)}</span>
           </div>
           <a href="/api/v1/opportunities/\${opp.id}/attachments/\${a.id}/download" target="_blank" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition">
             <i class="fa-solid fa-download mr-1"></i>Download
@@ -630,15 +665,30 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               </div>
             </div>
 
-            <div class="flex items-center justify-between text-xs p-3 rounded-lg bg-slate-900 border border-slate-800">
+            <!-- Contracting Officer Channel & Strategic Tools Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 text-xs p-3.5 rounded-lg bg-slate-900 border border-slate-800">
               <div>
-                <span class="text-slate-400">Contracting Officer:</span>
-                <span class="text-slate-200 font-mono ml-2">\${opp.pointOfContactEmail || "Listed in SAM.gov notice"}</span>
+                <span class="text-slate-400">Contracting Officer POC:</span>
+                <span class="text-amber-300 font-mono font-semibold ml-1.5">\${opp.pointOfContactEmail || "Listed in SAM.gov notice"}</span>
               </div>
-              <a href="\${opp.uiLink}" target="_blank" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 font-medium transition">
-                <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i>SAM.gov Notice
-              </a>
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openSendEmailModal('\${opp.id}')" class="px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 font-semibold transition">
+                  <i class="fa-solid fa-paper-plane mr-1.5"></i>Email KO / OSDBU
+                </button>
+                <button onclick="openComplianceCalculatorModal('\${opp.id}', '\${opp.naicsCode || '541512'}')" class="px-3 py-1.5 rounded bg-indigo-500/20 hover:bg-indigo-500 text-indigo-300 hover:text-white border border-indigo-500/40 font-semibold transition">
+                  <i class="fa-solid fa-scale-balanced mr-1.5"></i>50% Rule / NMR Calc
+                </button>
+                <button onclick="loadAwardIntelForOpp('\${opp.id}')" class="px-3 py-1.5 rounded bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 font-semibold transition">
+                  <i class="fa-solid fa-chart-line mr-1.5"></i>Incumbent &amp; Award Intel
+                </button>
+                <a href="\${opp.uiLink}" target="_blank" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition">
+                  <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>SAM.gov
+                </a>
+              </div>
             </div>
+
+            <!-- Dynamic Award & Incumbent Intelligence Panel -->
+            <div id="opp-award-intel-panel" class="hidden p-4 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-3 text-xs"></div>
 
             <div class="space-y-2">
               <div class="flex items-center justify-between">
@@ -651,7 +701,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
             </div>
 
             <div class="space-y-2">
-              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Contracting Officer Communications &amp; Capture Notes</h4>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Contracting Officer Communications, Amendments &amp; Capture Notes</h4>
               <div class="space-y-2">\${notesHtml}</div>
               
               <div class="pt-2 flex gap-2">
@@ -663,7 +713,10 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
             </div>
           </div>
 
-          <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/40 flex justify-end space-x-3">
+          <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/40 flex justify-between items-center">
+            <button onclick="openSendEmailModal('\${opp.id}')" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-xs border border-slate-700 transition">
+              <i class="fa-solid fa-envelope-open-text mr-1.5"></i>Send Question / Capability to KO
+            </button>
             <button onclick="openRfiModal('\${opp.id}')" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition">
               <i class="fa-solid fa-pen-nib mr-1.5"></i>Launch Proposal Studio
             </button>
@@ -696,11 +749,13 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
     }
 
     function openRfiModal(oppId) {
-      const opp = currentOpportunities.find(o => o.id === oppId);
+      const opp = currentOpportunities.find(o => o.id === oppId) || selectedOpp;
       if (!opp) return;
 
       const existing = document.getElementById("rfi-modal");
       if (existing) existing.remove();
+
+      const isRuleOfTwoCandidate = (opp.noticeType || "").toLowerCase() === "r" && opp.setAsideCode && !["SDVOSBC", "SDVOSBS"].includes(opp.setAsideCode);
 
       const modal = document.createElement("div");
       modal.id = "rfi-modal";
@@ -723,8 +778,10 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               <label class="block text-slate-300 font-semibold mb-1">Proposal Document Template</label>
               <select id="rfi-template" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
                 <option value="sources_sought">Sources Sought / RFI Capabilities Statement (Section L Alignment)</option>
-                <option value="sat_quote">Simplified Acquisition Threshold Quote (&lt; $250k Commercial Item)</option>
-                <option value="past_performance_matrix">Past Performance Relevancy Matrix &amp; CPARS Benchmarks</option>
+                <option value="rule_of_two_shaping" \${isRuleOfTwoCandidate ? 'selected' : ''}>🎯 "Rule of Two" Set-Aside Conversion &amp; Sole-Source Pitch (FAR 19.1405 / Kingdomware)</option>
+                <option value="sat_quote">⚡ Simplified Acquisition Threshold Quote (&lt; $250k Commercial Item)</option>
+                <option value="rfp_qa_inquiries">❓ Formal Solicitation Q&amp;A &amp; Technical Clarification Submittal</option>
+                <option value="past_performance_matrix">🏆 Past Performance Relevancy Matrix &amp; CPARS Benchmarks</option>
               </select>
             </div>
 
@@ -754,8 +811,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
             </div>
 
             <div>
-              <label class="block text-slate-400 font-semibold mb-1">Section L Technical Differentiators &amp; FAR 52.219-27 Compliance</label>
-              <textarea id="rfi-approach" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono text-[11px]" placeholder="Specific technical approach, staffing models, and compliance notes..."></textarea>
+              <label class="block text-slate-400 font-semibold mb-1">Section L Technical Differentiators, Q&amp;A Items, or FAR 52.219-27 Notes</label>
+              <textarea id="rfi-approach" rows="3" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono text-[11px]" placeholder="Specific technical approach, custom questions for the KO, or Similarly Situated Entity teaming details..."></textarea>
             </div>
 
             <div id="rfi-preview-container" class="hidden space-y-2 pt-2 border-t border-slate-800">
@@ -763,7 +820,12 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
                 <span class="font-bold text-amber-400 flex items-center gap-1.5">
                   <i class="fa-solid fa-check text-emerald-400"></i>Proposal Generated &amp; Stored in R2:
                 </span>
-                <span id="rfi-r2-key" class="font-mono text-slate-400 text-[10px]"></span>
+                <div class="flex items-center gap-2">
+                  <span id="rfi-r2-key" class="font-mono text-slate-400 text-[10px]"></span>
+                  <button onclick="dispatchGeneratedRfiToKo('\${opp.id}')" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] transition">
+                    <i class="fa-solid fa-paper-plane mr-1"></i>Email Directly to KO
+                  </button>
+                </div>
               </div>
               <pre id="rfi-preview-content" class="p-3 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-200 overflow-x-auto max-h-56 whitespace-pre-wrap font-mono"></pre>
             </div>
@@ -779,6 +841,419 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       \`;
 
       document.body.appendChild(modal);
+    }
+
+    function dispatchGeneratedRfiToKo(oppId) {
+      const previewEl = document.getElementById("rfi-preview-content");
+      const content = previewEl ? previewEl.innerText : "";
+      const opp = currentOpportunities.find(o => o.id === oppId) || selectedOpp;
+      const solNum = opp ? (opp.solicitationNumber || opp.id) : oppId;
+      openSendEmailModal(
+        oppId,
+        opp ? opp.pointOfContactEmail : "",
+        \`SDVOSB Submittal for \${solNum}: \${opp ? opp.title : "Capability Statement"}\`,
+        content
+      );
+    }
+
+    // ==========================================
+    // BIDIRECTIONAL KO & OSDBU EMAIL DISPATCH MODAL
+    // ==========================================
+    function openSendEmailModal(oppId, prefillTo = "", prefillSubject = "", prefillContent = "") {
+      const opp = currentOpportunities.find(o => o.id === oppId) || selectedOpp;
+      if (!opp) return;
+
+      const existing = document.getElementById("send-email-modal");
+      if (existing) existing.remove();
+
+      const solNum = opp.solicitationNumber || opp.id;
+      const toAddr = prefillTo || opp.pointOfContactEmail || "contracting.officer@agency.mil";
+      const defaultSubj = prefillSubject || \`[\${solNum}] SDVOSB Capability & Acquisition Inquiry - \${opp.title}\`;
+      const defaultBody = prefillContent || \`Dear Contracting Officer,\\n\\nRespectfully submitting our Verified Service-Disabled Veteran-Owned Small Business (SDVOSB) capability credentials (UEI: VET876543210 | CAGE: 9ABC4) in reference to solicitation \${solNum} ("\${opp.title}").\\n\\nPer FAR 19.1405 (SDVOSB Rule of Two) and FAR 52.219-27, our team will execute >50% of direct contract performance and welcomes any pre-solicitation clarifications.\\n\\nRespectfully,\\nDirector of Federal Capture\\nVALIANT VETERAN DEFENSE TECHNOLOGIES LLC\`;
+
+      const modal = document.createElement("div");
+      modal.id = "send-email-modal";
+      modal.className = "fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-paper-plane text-emerald-400 text-base"></i>
+              <h3 class="font-bold text-white text-base">Dispatch Official Correspondence to KO / OSDBU</h3>
+            </div>
+            <button onclick="document.getElementById('send-email-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div class="p-2.5 rounded bg-emerald-950/30 border border-emerald-800/50 text-emerald-200 text-[11px]">
+              <i class="fa-solid fa-reply mr-1.5 text-emerald-400"></i>
+              <strong>Automatic Bidirectional Threading:</strong> Replies from the Contracting Officer are routed via Cloudflare Email Routing and automatically logged under solicitation <span class="font-mono font-bold">\${escapeHtml(solNum)}</span>.
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">To: Contracting Officer / CS Email</label>
+                <input id="ko-email-to" type="email" value="\${escapeHtml(toAddr)}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono">
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">CC: Agency OSDBU / Small Business Specialist (Optional)</label>
+                <input id="ko-email-cc" type="email" placeholder="osdbu.advocate@agency.mil" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Subject Line</label>
+              <input id="ko-email-subject" type="text" value="\${escapeHtml(defaultSubj)}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+            </div>
+
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Message Body / Proposal Text</label>
+              <textarea id="ko-email-body" rows="8" class="w-full bg-slate-900 border border-slate-800 rounded p-2.5 text-slate-100 font-mono text-[11px]">\${escapeHtml(defaultBody)}</textarea>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+              <input type="checkbox" id="ko-mark-submitted" class="rounded bg-slate-900 border-slate-800 text-emerald-500">
+              <label for="ko-mark-submitted" class="text-slate-300">Transition solicitation status to <strong>Submitted</strong> upon dispatch</label>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+              <button onclick="document.getElementById('send-email-modal').remove()" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
+              <button onclick="submitOutboundEmail('\${opp.id}')" id="btn-send-ko-email" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid fa-paper-plane mr-1.5"></i>Dispatch to Contracting Officer
+              </button>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+    }
+
+    async function submitOutboundEmail(oppId) {
+      const to = document.getElementById("ko-email-to").value.trim();
+      const ccOsdbu = document.getElementById("ko-email-cc").value.trim();
+      const subject = document.getElementById("ko-email-subject").value.trim();
+      const content = document.getElementById("ko-email-body").value.trim();
+      const markAsSubmitted = document.getElementById("ko-mark-submitted").checked;
+      const btn = document.getElementById("btn-send-ko-email");
+
+      if (!to || !subject || !content) {
+        alert("Recipient email, subject, and message content are required.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Dispatching...';
+
+      try {
+        const res = await fetch(\`/api/v1/opportunities/\${oppId}/send-email\`, {
+          method: "POST",
+          headers: fetchHeaders,
+          credentials: "include",
+          body: JSON.stringify({ to, ccOsdbu, subject, content, markAsSubmitted })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(\`Correspondence dispatched to \${data.recipients.join(", ")}!\\nReply-To Threading Address: \${data.replyTo}\`);
+          document.getElementById("send-email-modal").remove();
+          await loadStats();
+          await loadOpportunities();
+          if (document.getElementById("detail-modal")) {
+            viewDetails(oppId);
+          }
+        } else {
+          alert(data.error || "Failed to send email");
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-1.5"></i>Dispatch to Contracting Officer';
+        }
+      } catch (e) {
+        alert("Dispatch error: " + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-1.5"></i>Dispatch to Contracting Officer';
+      }
+    }
+
+    // ==========================================
+    // CONTRACTING OFFICER & OSDBU DIRECTORY MODAL
+    // ==========================================
+    async function openContactsModal() {
+      const existing = document.getElementById("contacts-modal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "contacts-modal";
+      modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-address-book text-cyan-400 text-lg"></i>
+              <div>
+                <h3 class="font-bold text-white text-base">Contracting Officer (KO) &amp; Agency OSDBU Contact Registry</h3>
+                <p class="text-[11px] text-slate-400">Direct communication channels extracted from SAM.gov notices and inbound correspondence</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('contacts-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="contacts-list-body" class="flex-1 overflow-y-auto p-6 space-y-3 text-xs">
+            <div class="text-center text-slate-400 py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading Contracting Officer &amp; OSDBU Directory...</div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+
+      try {
+        const res = await fetch("/api/v1/contacts", { credentials: "include", headers: fetchHeaders });
+        const data = await res.json();
+        const container = document.getElementById("contacts-list-body");
+        const contacts = data.contacts || [];
+
+        if (contacts.length === 0) {
+          container.innerHTML = '<p class="text-slate-500 italic text-center py-6">No Contracting Officer contacts indexed yet. Poll SAM.gov or seed demo data.</p>';
+          return;
+        }
+
+        container.innerHTML = contacts.map(c => {
+          const isOsdbu = (c.role || "").toLowerCase().includes("osdbu") || (c.role || "").toLowerCase().includes("small business");
+          const badge = isOsdbu
+            ? '<span class="px-2 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 text-[10px] font-bold uppercase">OSDBU Advocate</span>'
+            : '<span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold uppercase">Contracting Officer</span>';
+
+          const firstOppId = c.solicitations && c.solicitations[0] ? c.solicitations[0].id : "";
+          const solsHtml = (c.solicitations || []).map(s => \`
+            <button onclick="document.getElementById('contacts-modal').remove(); viewDetails('\${s.id}')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-mono text-[10px] transition">
+              \${escapeHtml(s.solicitationNumber)}
+            </button>
+          \`).join(" ");
+
+          return \`
+            <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-white text-sm">\${escapeHtml(c.name)}</span>
+                  \${badge}
+                </div>
+                <div class="text-slate-400 text-[11px]">
+                  <i class="fa-solid fa-landmark mr-1 text-slate-500"></i>\${escapeHtml(c.agency)} — <span class="text-slate-300">\${escapeHtml(c.office)}</span>
+                </div>
+                <div class="flex items-center gap-4 text-[11px] font-mono pt-0.5">
+                  <span class="text-amber-300"><i class="fa-regular fa-envelope mr-1"></i>\${escapeHtml(c.email)}</span>
+                  <span class="text-slate-300"><i class="fa-solid fa-phone mr-1 text-slate-500"></i>\${escapeHtml(c.phone)}</span>
+                </div>
+                <div class="pt-1 flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] text-slate-500">Linked Solicitations:</span>
+                  \${solsHtml}
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                \${firstOppId ? \`
+                  <button onclick="document.getElementById('contacts-modal').remove(); openSendEmailModal('\${firstOppId}', '\${escapeHtml(c.email)}')" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 font-semibold text-xs transition">
+                    <i class="fa-solid fa-paper-plane mr-1.5"></i>Compose Message
+                  </button>
+                \` : ''}
+              </div>
+            </div>
+          \`;
+        }).join("");
+      } catch (e) {
+        document.getElementById("contacts-list-body").innerHTML = '<p class="text-rose-400 text-center">Failed to load contacts: ' + e.message + '</p>';
+      }
+    }
+
+    // ==========================================
+    // FAR 52.219-27 (50% SUBCONTRACTING) & NMR CALCULATOR MODAL
+    // ==========================================
+    function openComplianceCalculatorModal(oppId = "", naicsCode = "541512") {
+      const existing = document.getElementById("los-calc-modal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "los-calc-modal";
+      modal.className = "fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm";
+
+      modal.innerHTML = \`
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-scale-balanced text-emerald-400 text-lg"></i>
+              <div>
+                <h3 class="font-bold text-white text-base">FAR 52.219-27 &amp; 13 CFR § 125.6 Subcontracting Calculator</h3>
+                <p class="text-[11px] text-slate-400">Verify SDVOSB Self-Performance, "Similarly Situated Entity" Teaming &amp; Non-Manufacturer Rule</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('los-calc-modal').remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1">Procurement Category (13 CFR § 125.6)</label>
+                <select id="los-category" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100">
+                  <option value="services">Services (Max 50% Non-SDVOSB Subcontracting)</option>
+                  <option value="supplies">Supplies / Products (Max 50% + Non-Manufacturer Rule)</option>
+                  <option value="general_construction">General Construction (Max 85% Non-SDVOSB)</option>
+                  <option value="specialty_construction">Specialty Trade Construction (Max 75% Non-SDVOSB)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-300 font-semibold mb-1">Target NAICS Code (for NMR Waiver Check)</label>
+                <input id="los-naics" value="\${escapeHtml(naicsCode || '541512')}" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Total Contract Award Value ($)</label>
+                <input id="los-total" type="number" value="500000" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono">
+              </div>
+              <div>
+                <label class="block text-slate-400 font-semibold mb-1">Cost of Materials Excluded ($ — Supplies/Const Only)</label>
+                <input id="los-materials" type="number" value="0" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-100 font-mono">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-emerald-400 font-semibold mb-1">Your Prime SDVOSB Direct ($)</label>
+                <input id="los-prime" type="number" value="200000" class="w-full bg-slate-900 border border-emerald-500/40 rounded p-2 text-slate-100 font-mono">
+              </div>
+              <div>
+                <label class="block text-amber-400 font-semibold mb-1" title="Another SBA VetCert SDVOSB subcontractor counts 100% toward your self-performance!">Similarly Situated SDVOSB Sub ($)</label>
+                <input id="los-sim-sub" type="number" value="100000" class="w-full bg-slate-900 border border-amber-500/40 rounded p-2 text-slate-100 font-mono">
+              </div>
+              <div>
+                <label class="block text-rose-400 font-semibold mb-1">Non-SDVOSB / Large Sub ($)</label>
+                <input id="los-non-sub" type="number" value="200000" class="w-full bg-slate-900 border border-rose-500/40 rounded p-2 text-slate-100 font-mono">
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <button onclick="runLosCalculation('\${oppId}', false)" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow">
+                <i class="fa-solid fa-calculator mr-1.5"></i>Calculate FAR 52.219-27 Compliance
+              </button>
+              \${oppId ? \`
+                <button onclick="runLosCalculation('\${oppId}', true)" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+                  <i class="fa-solid fa-file-shield mr-1.5"></i>Calculate &amp; Save Audit to Solicitation
+                </button>
+              \` : ''}
+            </div>
+
+            <div id="los-result-box" class="hidden p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3"></div>
+          </div>
+        </div>
+      \`;
+
+      document.body.appendChild(modal);
+      runLosCalculation(oppId, false);
+    }
+
+    async function runLosCalculation(oppId = "", saveToNotes = false) {
+      const payload = {
+        opportunityId: oppId || undefined,
+        procurementType: document.getElementById("los-category").value,
+        naicsCode: document.getElementById("los-naics").value.trim(),
+        totalContractValue: Number(document.getElementById("los-total").value || 0),
+        costOfMaterials: Number(document.getElementById("los-materials").value || 0),
+        primeDirectDollars: Number(document.getElementById("los-prime").value || 0),
+        similarlySituatedSubDollars: Number(document.getElementById("los-sim-sub").value || 0),
+        nonSdvosbSubDollars: Number(document.getElementById("los-non-sub").value || 0),
+        saveToNotes
+      };
+
+      try {
+        const res = await fetch("/api/v1/compliance/calculate-los", {
+          method: "POST",
+          headers: fetchHeaders,
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        const { los, nmr } = await res.json();
+        const box = document.getElementById("los-result-box");
+        box.classList.remove("hidden");
+
+        const statusBadge = los.compliant
+          ? '<span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i>FAR 52.219-27 COMPLIANT</span>'
+          : '<span class="px-2.5 py-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i>VIOLATION: ILLEGAL PASS-THROUGH RISK</span>';
+
+        box.innerHTML = \`
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <span class="font-bold text-white">Compliance Determination</span>
+            \${statusBadge}
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="p-2 rounded bg-slate-950 border border-slate-800">
+              <span class="text-[10px] text-slate-400 block">SDVOSB Team Share (Prime + Sim. Situated)</span>
+              <span class="text-sm font-bold text-emerald-400 font-mono">\${los.effectiveSdvosbTeamPercent}%</span>
+            </div>
+            <div class="p-2 rounded bg-slate-950 border border-slate-800">
+              <span class="text-[10px] text-slate-400 block">Non-SDVOSB Sub Share</span>
+              <span class="text-sm font-bold \${los.actualNonSdvosbPercent <= los.maxAllowedNonSdvosbPercent ? 'text-amber-300' : 'text-rose-400'} font-mono">\${los.actualNonSdvosbPercent}% (Max \${los.maxAllowedNonSdvosbPercent}%)</span>
+            </div>
+            <div class="p-2 rounded bg-slate-950 border border-slate-800">
+              <span class="text-[10px] text-slate-400 block">Remaining Non-SDVOSB Sub Cap</span>
+              <span class="text-sm font-bold text-slate-200 font-mono">$\${los.remainingNonSdvosbCapacityDollars.toLocaleString()}</span>
+            </div>
+          </div>
+          <div class="p-2.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-300 space-y-1">
+            <div class="font-semibold text-amber-400">Non-Manufacturer Rule (13 CFR § 121.406) Check — NAICS \${escapeHtml(nmr.naicsCode)}:</div>
+            <div>\${escapeHtml(nmr.waiverSummary)}</div>
+            <div class="text-slate-400 italic">\${escapeHtml(nmr.resellerStrategy)}</div>
+          </div>
+        \`;
+
+        if (saveToNotes && oppId) {
+          alert("FAR 52.219-27 Subcontracting Compliance Audit saved to solicitation notes!");
+          if (document.getElementById("detail-modal")) {
+            viewDetails(oppId);
+          }
+        }
+      } catch (e) {
+        alert("Calculation failed: " + e.message);
+      }
+    }
+
+    async function loadAwardIntelForOpp(oppId) {
+      const panel = document.getElementById("opp-award-intel-panel");
+      if (!panel) return;
+      panel.classList.remove("hidden");
+      panel.innerHTML = '<div class="text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Querying USAspending.gov Historical Award &amp; Incumbent Intelligence...</div>';
+
+      try {
+        const res = await fetch(\`/api/v1/opportunities/\${oppId}/award-intel\`, { credentials: "include", headers: fetchHeaders });
+        const data = await res.json();
+        const awards = (data.awardIntelligence && data.awardIntelligence.awards) || [];
+        const nmr = data.nmrWaiverStatus || {};
+
+        const rowsHtml = awards.map(a => \`
+          <div class="p-2.5 rounded bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div class="font-bold text-amber-300">\${escapeHtml(a.recipientName)} <span class="text-slate-400 font-mono text-[10px]">(\${escapeHtml(a.awardId)})</span></div>
+              <div class="text-slate-300 text-[11px]">\${escapeHtml(a.description)}</div>
+              <div class="text-emerald-400 text-[10px] font-semibold mt-0.5"><i class="fa-solid fa-bullseye mr-1"></i>\${escapeHtml(a.capturePlay)}</div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="font-bold text-white font-mono text-sm">$\${Number(a.awardAmount || 0).toLocaleString()}</div>
+              <div class="text-[10px] text-slate-400">Ends: \${escapeHtml(a.endDate)}</div>
+            </div>
+          </div>
+        \`).join("");
+
+        panel.innerHTML = \`
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="font-bold text-amber-400 uppercase tracking-wider"><i class="fa-solid fa-trophy mr-1.5"></i>Historical Award, Incumbent &amp; Subcontracting Intelligence (NAICS \${escapeHtml(data.naicsCode || '541512')})</span>
+            <button onclick="document.getElementById('opp-award-intel-panel').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="space-y-2">\${rowsHtml}</div>
+          <div class="p-2 rounded bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300">
+            <strong class="text-cyan-400">SBA Non-Manufacturer Rule Advisory:</strong> \${escapeHtml(nmr.waiverSummary || '')} — \${escapeHtml(nmr.resellerStrategy || '')}
+          </div>
+        \`;
+      } catch (e) {
+        panel.innerHTML = '<div class="text-rose-400">Failed to load award intelligence: ' + e.message + '</div>';
+      }
     }
 
     async function generateRfi(oppId) {
@@ -1910,9 +2385,20 @@ export function renderKanbanBoard(): string {
           <span class="text-slate-400 font-semibold"><i class="fa-solid fa-filter mr-1.5 text-slate-500"></i>Filters:</span>
           
           <select id="filter-setaside" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
-            <option value="">All Set-Asides</option>
-            <option value="SDVOSBC" selected>SDVOSBC (Service-Disabled Veteran)</option>
+            <option value="" selected>All Set-Asides (Incl. Rule-of-Two)</option>
+            <option value="SDVOSBC">SDVOSBC (SDVOSB Set-Aside)</option>
+            <option value="SDVOSBS">SDVOSBS (SDVOSB Sole Source)</option>
             <option value="VOSBC">VOSBC (Veteran-Owned)</option>
+            <option value="SBA">SBA (Rule-of-Two Flip Target)</option>
+          </select>
+
+          <select id="filter-notice-type" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
+            <option value="">All Notice Stages</option>
+            <option value="r">Sources Sought / RFI (r)</option>
+            <option value="k">Combined Synopsis / SAT (k)</option>
+            <option value="o">Solicitation / RFP (o)</option>
+            <option value="s">Special / Sole Source (s)</option>
+            <option value="a">Award Notice (a)</option>
           </select>
 
           <select id="filter-naics" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
@@ -1924,7 +2410,12 @@ export function renderKanbanBoard(): string {
 
           <button id="btn-sat-toggle" onclick="toggleSatFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Simplified Acquisition (&lt; $250k)</span>
+            <span>SAT (&lt; $250k)</span>
+          </button>
+
+          <button id="btn-ro2-toggle" onclick="toggleRuleOfTwoFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5" title="Show Unrestricted/Small Business Sources Sought to flip to SDVOSBC">
+            <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
+            <span>🎯 Rule-of-Two Targets</span>
           </button>
         </div>
 
@@ -2003,6 +2494,7 @@ export function renderKanbanBoard(): string {
 
     <script>
       let satFilterActive = false;
+      let ruleOfTwoFilterActive = false;
 
       function toggleSatFilter() {
         satFilterActive = !satFilterActive;
@@ -2015,19 +2507,37 @@ export function renderKanbanBoard(): string {
         applyFilters();
       }
 
+      function toggleRuleOfTwoFilter() {
+        ruleOfTwoFilterActive = !ruleOfTwoFilterActive;
+        const btn = document.getElementById("btn-ro2-toggle");
+        if (ruleOfTwoFilterActive) {
+          btn.classList.add("bg-fuchsia-500/20", "text-fuchsia-300", "border-fuchsia-500/40");
+        } else {
+          btn.classList.remove("bg-fuchsia-500/20", "text-fuchsia-300", "border-fuchsia-500/40");
+        }
+        applyFilters();
+      }
+
       function applyFilters() {
         const naics = document.getElementById("filter-naics").value;
         const setAside = document.getElementById("filter-setaside").value;
+        const noticeType = document.getElementById("filter-notice-type") ? document.getElementById("filter-notice-type").value : "";
         const q = document.getElementById("search-input").value.toLowerCase().trim();
 
         const filtered = currentOpportunities.filter(o => {
           if (naics && !(o.naicsCode || "").includes(naics)) return false;
           if (setAside && o.setAsideCode !== setAside) return false;
+          if (noticeType && (o.noticeType || "").toLowerCase() !== noticeType.toLowerCase()) return false;
           if (satFilterActive) {
-            const isSat = (o.title || "").toLowerCase().includes("simplified acquisition") || 
+            const isSat = (o.noticeType || "").toLowerCase() === "k" ||
+                          (o.title || "").toLowerCase().includes("simplified acquisition") || 
                           (o.title || "").toLowerCase().includes("sat") || 
                           (o.solicitationNumber || "").includes("Q");
             if (!isSat) return false;
+          }
+          if (ruleOfTwoFilterActive) {
+            const isRo2 = (o.noticeType || "").toLowerCase() === "r" && !["SDVOSBC", "SDVOSBS"].includes(o.setAsideCode || "");
+            if (!isRo2) return false;
           }
           if (q) {
             const haystack = ((o.title || "") + " " + (o.solicitationNumber || "") + " " + (o.agency || "")).toLowerCase();

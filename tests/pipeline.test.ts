@@ -3,6 +3,11 @@ import assert from "node:assert";
 import { SamGovClient } from "../src/services/sam-api";
 import { RfiGenerator } from "../src/services/rfi-generator";
 import { StorageService } from "../src/services/storage";
+import {
+  calculateLimitationsOnSubcontracting,
+  checkNonManufacturerRule,
+  fetchHistoricalAwardIntelligence,
+} from "../src/services/compliance-and-intel";
 
 // Mock R2 Bucket for unit testing
 class MockR2Bucket {
@@ -146,5 +151,89 @@ describe("SDVOSB Pipeline & Ingestion Engine Tests", () => {
 
     assert.ok(result.preview.includes("PAST PERFORMANCE MATRIX"));
     assert.ok(result.preview.includes("CPARS"));
+  });
+
+  test("RfiGenerator creates Rule-of-Two Set-Aside Conversion & Kingdomware Determination Request", async () => {
+    const generator = new RfiGenerator(storage);
+    const opp = {
+      id: "W15P7T-26-R-0114",
+      solicitationNumber: "W15P7T-26-R-0114",
+      title: "Tactical Edge Cloud & Automated Telemetry Pipeline",
+      agency: "VETERANS AFFAIRS, DEPARTMENT OF",
+      naicsCode: "541512",
+      setAsideCode: "SBA",
+    };
+
+    const result = await generator.generateAndStore(opp, {
+      templateType: "rule_of_two_shaping",
+      companyName: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
+      uei: "VET876543210",
+      cageCode: "9ABC4",
+      sdvosbCertified: true,
+      coreCompetencies: "Tactical Cloud, Zero Trust",
+      pastPerformance: "VA Cloud Migration ($4.2M)",
+    });
+
+    assert.ok(result.preview.includes("RULE OF TWO"));
+    assert.ok(result.preview.includes("Kingdomware"));
+    assert.ok(result.preview.includes("13 CFR § 125.6"));
+  });
+
+  test("RfiGenerator creates Formal Solicitation Q&A Submittal Matrix", async () => {
+    const generator = new RfiGenerator(storage);
+    const opp = {
+      id: "HT0011-26-Q-0089",
+      solicitationNumber: "HT0011-26-Q-0089",
+      title: "FHIR API Gateway Engineering",
+      agency: "DEFENSE HEALTH AGENCY",
+    };
+
+    const result = await generator.generateAndStore(opp, {
+      templateType: "rfp_qa_inquiries",
+      companyName: "VALIANT VETERAN DEFENSE TECHNOLOGIES LLC",
+      uei: "VET876543210",
+      cageCode: "9ABC4",
+      sdvosbCertified: true,
+      coreCompetencies: "FHIR, HL7",
+      pastPerformance: "DHA Interoperability",
+    });
+
+    assert.ok(result.preview.includes("OFFEROR QUESTIONS MATRIX"));
+    assert.ok(result.preview.includes("Similarly Situated Entity"));
+  });
+
+  test("FAR 52.219-27 / 13 CFR 125.6 Calculator properly credits Similarly Situated Entities and flags pass-through violations", () => {
+    // Case 1: Prime does $200k (40%), Similarly Situated SDVOSB Sub does $150k (30%) -> Combined SDVOSB Team = 70%, Non-SDVOSB = 30% ($150k) -> COMPLIANT!
+    const compliantRes = calculateLimitationsOnSubcontracting({
+      procurementType: "services",
+      totalContractValue: 500000,
+      primeDirectDollars: 200000,
+      similarlySituatedSubDollars: 150000,
+      nonSdvosbSubDollars: 150000,
+    });
+    assert.strictEqual(compliantRes.compliant, true);
+    assert.strictEqual(compliantRes.effectiveSdvosbTeamPercent, 70);
+    assert.strictEqual(compliantRes.actualNonSdvosbPercent, 30);
+
+    // Case 2: Non-SDVOSB Sub does $300k (60%) on a $500k Services contract -> VIOLATION (>50%)
+    const violationRes = calculateLimitationsOnSubcontracting({
+      procurementType: "services",
+      totalContractValue: 500000,
+      primeDirectDollars: 200000,
+      similarlySituatedSubDollars: 0,
+      nonSdvosbSubDollars: 300000,
+    });
+    assert.strictEqual(violationRes.compliant, false);
+    assert.strictEqual(violationRes.actualNonSdvosbPercent, 60);
+  });
+
+  test("Non-Manufacturer Rule (NMR) checker identifies SBA Class Waivers and Services exemptions", () => {
+    const waiverRes = checkNonManufacturerRule("334111");
+    assert.strictEqual(waiverRes.hasActiveClassWaiver, true);
+    assert.ok(waiverRes.waiverSummary.includes("Electronic Computers"));
+
+    const servicesRes = checkNonManufacturerRule("541512");
+    assert.strictEqual(servicesRes.hasActiveClassWaiver, false);
+    assert.ok(servicesRes.resellerStrategy.includes("does not apply to service contracts"));
   });
 });

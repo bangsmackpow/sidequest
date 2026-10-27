@@ -1,6 +1,11 @@
 import { StorageService } from "./storage";
 
-export type ProposalTemplateType = "sources_sought" | "sat_quote" | "past_performance_matrix";
+export type ProposalTemplateType =
+  | "sources_sought"
+  | "sat_quote"
+  | "past_performance_matrix"
+  | "rule_of_two_shaping"
+  | "rfp_qa_inquiries";
 
 export interface RfiGenerationOptions {
   companyName: string;
@@ -42,6 +47,10 @@ export class RfiGenerator {
       return this.generateSatQuoteMarkdown(opp, opts);
     } else if (template === "past_performance_matrix") {
       return this.generatePastPerformanceMatrixMarkdown(opp, opts);
+    } else if (template === "rule_of_two_shaping") {
+      return this.generateRuleOfTwoShapingMarkdown(opp, opts);
+    } else if (template === "rfp_qa_inquiries") {
+      return this.generateRfpQaInquiriesMarkdown(opp, opts);
     }
 
     return this.generateSourcesSoughtMarkdown(opp, opts);
@@ -260,6 +269,121 @@ ${opts.pastPerformance}
 ## 3. CPARS RATINGS SUMMARY & QUALITY ATTESTATION
 
 All referenced contracts were completed on schedule, within budgeted ceilings, with zero cure notices or performance deficiencies. References are available immediately upon Contracting Officer request.
+`;
+  }
+
+  /**
+   * Template 4: "Rule of Two" Set-Aside Conversion & Sole-Source Determination Request (FAR 19.1405 / FAR 19.1406 / 38 U.S.C. § 8127)
+   */
+  private generateRuleOfTwoShapingMarkdown(opp: OpportunityDetails, opts: RfiGenerationOptions): string {
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const solNum = opp.solicitationNumber || opp.id;
+    const agencyStr = [opp.agency, opp.subTier, opp.office].filter(Boolean).join(" - ") || "Federal Procuring Activity";
+    const isVa = (opp.agency || "").toUpperCase().includes("VETERANS");
+
+    return `# REQUEST FOR SDVOSB SET-ASIDE DETERMINATION ("RULE OF TWO" / SOLE SOURCE)
+*(Pursuant to ${isVa ? "38 U.S.C. § 8127 (Vets First / Kingdomware) & VAAR 819.7005" : "FAR 19.1405 (SDVOSB Set-Aside) & FAR 19.1406 (SDVOSB Sole Source)"})*
+
+**TO:** Contracting Officer (${opp.pointOfContactEmail || "Procuring Contracting Officer"}) & Agency OSDBU / Small Business Specialist  
+**FROM:** ${opts.companyName} (SBA VetCert Certified SDVOSB | UEI: \`${opts.uei}\` | CAGE: \`${opts.cageCode}\`)  
+**SOLICITATION / NOTICE ID:** ${solNum} — *${opp.title}*  
+**PROCURING AGENCY:** ${agencyStr}  
+**NAICS CODE:** ${opp.naicsCode || "541512"}  
+**DATE:** ${today}  
+
+---
+
+## 1. FORMAL MARKET RESEARCH & ACQUISITION STRATEGY RECOMMENDATION
+
+**${opts.companyName}**, an SBA VetCert-verified **Service-Disabled Veteran-Owned Small Business (SDVOSB)**, respectfully submits this Market Research Capability Determination in response to Notice **${solNum}**.
+
+We formally request that the Contracting Officer and Small Business Specialist **designate the forthcoming solicitation as a 100% Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside** under **${isVa ? "38 U.S.C. § 8127(d) and VAAR 819.7005" : "FAR 19.1405"}**, or alternatively consider a **Direct SDVOSB Sole-Source Award** under **${isVa ? "38 U.S.C. § 8127(c) / VAAR 819.7007" : "FAR 19.1406"}**.
+
+### Regulatory Justification for SDVOSB Set-Aside / Sole Source:
+1. **The "Rule of Two" Mandate (${isVa ? "38 U.S.C. § 8127(d) — Mandatory Vets First Priority" : "FAR 19.1405"}):**  
+   ${isVa ? "Under the Supreme Court's unanimous ruling in *Kingdomware Technologies, Inc. v. United States*, 579 U.S. 162 (2016), the Department of Veterans Affairs **shall** award contracts on the basis of competition restricted to SDVOSBs whenever the Contracting Officer has a reasonable expectation that two or more verified SDVOSBs will submit offers and the award can be made at a fair and reasonable price." : "Under FAR 19.1405(b), to fulfill the statutory 3%–5% federal SDVOSB prime contracting goal, the Contracting Officer shall set aside acquisitions exceeding the micro-purchase threshold when there is a reasonable expectation that offers will be received from two or more SDVOSB concerns at a fair market price."}
+2. **Streamlined Sole-Source Authority (${isVa ? "VAAR 819.7007 — Up to $5.0M Ceiling" : "FAR 19.1406 — Up to $4.5M Services / $7.0M Manufacturing"}):**  
+   If market research does not identify two or more responsible SDVOSBs, the Contracting Officer is authorized to award a **Sole-Source contract directly to ${opts.companyName}** without full and open competition, accelerating agency mission delivery while earning 100% SDVOSB socio-economic credit.
+3. **13 CFR § 125.6 "Similarly Situated Entity" Compliance:**  
+   ${opts.companyName} will perform >50% of the contract labor cost directly and/or alongside vetted SBA VetCert SDVOSB ("similarly situated entity") partners, ensuring zero pass-through risk and full compliance with **FAR 52.219-27**.
+
+---
+
+## 2. TECHNICAL CAPABILITY & REQUIREMENT ALIGNMENT
+
+${opts.coreCompetencies}
+
+${opts.customApproach ? `### Tailored Execution Plan for ${solNum}\n${opts.customApproach}` : ""}
+
+---
+
+## 3. VERIFIED PRIME PAST PERFORMANCE
+
+${opts.pastPerformance}
+
+---
+
+## 4. REQUEST FOR ACQUISITION STRATEGY CONFIRMATION
+
+${opts.companyName} stands ready to submit a comprehensive, competitively priced proposal as an SDVOSB Prime Contractor. We respectfully request confirmation that this requirement will be transitioned to an **SDVOSB Set-Aside (` + "`SDVOSBC`" + `)** prior to RFP release.
+
+**Respectfully Submitted,**  
+**${opts.pocName || "Director of Federal Capture"}**  
+${opts.companyName}  
+Email: ${opts.pocEmail || "capture@sdvosb-proposals.mil"} | Phone: ${opts.pocPhone || "(555) 789-0123"}  
+SAM.gov UEI: \`${opts.uei}\` | CAGE: \`${opts.cageCode}\`
+`;
+  }
+
+  /**
+   * Template 5: Formal Solicitation Q&A & Technical Clarification Submittal
+   */
+  private generateRfpQaInquiriesMarkdown(opp: OpportunityDetails, opts: RfiGenerationOptions): string {
+    const today = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const solNum = opp.solicitationNumber || opp.id;
+
+    return `# FORMAL SOLICITATION QUESTIONS & CLARIFICATION REQUEST (Q&A)
+
+**SOLICITATION NUMBER:** ${solNum}  
+**PROJECT TITLE:** ${opp.title}  
+**PROCURING AGENCY:** ${[opp.agency, opp.subTier, opp.office].filter(Boolean).join(" / ")}  
+**SUBMITTED BY:** ${opts.companyName} (Certified SDVOSB | UEI: \`${opts.uei}\` | CAGE: \`${opts.cageCode}\`)  
+**SUBMISSION DATE:** ${today}  
+
+---
+
+## 1. OFFEROR QUESTIONS MATRIX
+
+Please find below our formal technical and contractual questions regarding Solicitation **${solNum}**:
+
+| Q# | Solicitation / PWS Section | Reference Page / Para | Offeror Question & Recommended Clarification |
+| :--- | :--- | :--- | :--- |
+| **1** | Section C / PWS Scope | Para 3.1 — Technical Architecture | Will the Government provide existing architecture diagrams and ATO boundary documentation upon contract award, or during the solicitation phase? |
+| **2** | Section L — Instructions to Offerors | Socioeconomic / Teaming | Can the Contracting Officer confirm that past performance and staffing from a "Similarly Situated Entity" (another SBA VetCert SDVOSB subcontractor under **13 CFR § 125.6**) will be evaluated identically to the Prime Offeror's direct experience? |
+| **3** | Section M — Evaluation Factors | Past Performance Relevancy | Would the Government consider accepting 3 relevant contract references performed within the past 5 years (including active task orders with at least 12 months of completed performance and CPARS/PPQ documentation)? |
+| **4** | Key Personnel & Clearances | Security Requirements | Are interim Secret clearances acceptable at proposal submission provided final clearances are adjudicated prior to operational cutover? |
+
+${opts.customApproach ? `\n### Additional Offeror Clarifications / Specific Questions\n${opts.customApproach}\n` : ""}
+
+---
+
+## 2. POINT OF CONTACT
+
+Thank you for your time and consideration of these questions.
+
+**Point of Contact:** ${opts.pocName || "Director of Capture"}  
+**Organization:** ${opts.companyName} (Certified SDVOSB)  
+**Email:** ${opts.pocEmail || "capture@sdvosb-proposals.mil"} | **Phone:** ${opts.pocPhone || "(555) 789-0123"}
 `;
   }
 
