@@ -504,7 +504,10 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
           credentials: "include"
         });
         const result = await res.json();
-        alert(\`SAM.gov Sync Completed! Processed: \${result.noticesProcessed} notices, Generated Alerts: \${result.alertsCreated}\`);
+        const quotaMsg = result.quotaThrottled
+          ? \`\\n(Note: SAM.gov daily API quota reached; resets at \${result.nextAccessTime}. Synced curated SDVOSB lifecycle notices.)\`
+          : "";
+        alert(\`SAM.gov Sync Completed! Processed: \${result.noticesProcessed} notices, Alerts: \${result.alertsCreated}, Amendments: \${result.amendmentsDetected || 0}\${quotaMsg}\`);
         await loadStats();
         await loadOpportunities();
       } catch (e) {

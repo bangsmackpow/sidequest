@@ -54,11 +54,13 @@ export class SamGovClient {
   constructor(private apiKey?: string) {}
 
   /**
-   * Search SAM.gov opportunities with pagination
+   * Search SAM.gov opportunities with quota-aware single-batch retrieval and 429 fallback
    */
   async fetchOpportunities(params: Omit<SamSearchParams, "apiKey">): Promise<{
     notices: SamGovNotice[];
     totalRecords: number;
+    quotaThrottled?: boolean;
+    nextAccessTime?: string;
   }> {
     if (!this.apiKey) {
       console.warn("SAM_GOV_API_KEY not configured. Generating realistic mock SDVOSB notices for dev/demo.");
@@ -69,7 +71,7 @@ export class SamGovClient {
     let offset = params.offset || 0;
     const limit = params.limit || 100;
     let totalRecords = 0;
-    const maxSafetyPages = 5; // Prevent runaway worker timeouts on large ranges
+    const maxSafetyPages = 1; // Single 100-record batch per sync to preserve SAM.gov daily API quota
 
     for (let page = 0; page < maxSafetyPages; page++) {
       const url = new URL(this.baseUrl);
@@ -98,6 +100,24 @@ export class SamGovClient {
 
       if (!res.ok) {
         const errorText = await res.text();
+        if (res.status === 429) {
+          let nextAccess = "Next UTC Midnight";
+          try {
+            const parsed = JSON.parse(errorText);
+            if (parsed.nextAccessTime) nextAccess = parsed.nextAccessTime;
+          } catch {
+            // ignore
+          }
+          console.warn(
+            `[SAM.gov Quota Guard] Daily API rate limit reached (429). Next reset: ${nextAccess}. Using fallback notices.`
+          );
+          const fallback = this.getMockOpportunities(params);
+          return {
+            ...fallback,
+            quotaThrottled: true,
+            nextAccessTime: nextAccess,
+          };
+        }
         throw new Error(`SAM.gov API error (${res.status}): ${errorText}`);
       }
 

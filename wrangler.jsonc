@@ -31,9 +31,9 @@
     }
   ],
 
-  // Cloudflare Cron Scheduled Triggers (every 30 mins)
+  // Cloudflare Cron Scheduled Triggers (every 6 hours to respect SAM.gov daily API quota)
   "triggers": {
-    "crons": ["*/30 * * * *"]
+    "crons": ["0 */6 * * *"]
   },
 
   // Observability & Logging

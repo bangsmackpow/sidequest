@@ -20,6 +20,8 @@ export interface IngestionResult {
   amendmentsDetected?: number;
   attachmentsIngested?: number;
   emailsDispatched?: number;
+  quotaThrottled?: boolean;
+  nextAccessTime?: string;
   syncTimestamp: string;
   error?: string;
 }
@@ -60,7 +62,7 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
 
     // 3. API Retrieval: Call SAM.gov Opportunities Search across full notice lifecycle:
     // p = Presolicitation, r = Sources Sought, k = Combined Synopsis/Solicitation, o = Solicitation, s = Special Notice, a = Award Notice
-    const { notices } = await samClient.fetchOpportunities({
+    const { notices, quotaThrottled, nextAccessTime } = await samClient.fetchOpportunities({
       postedFrom,
       postedTo,
       limit: 100,
@@ -68,9 +70,9 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       typeOfSetAside: "SDVOSBC",
     });
 
-    // If live API key is configured and any profile targets Rule-of-Two Shaping ("SBA" or "NONE"),
+    // If live API key is configured, not throttled, and any profile targets Rule-of-Two Shaping ("SBA" or "NONE"),
     // also fetch Sources Sought (ptype=r) in target NAICS codes to uncover Set-Aside Flip opportunities
-    if (env.SAM_GOV_API_KEY) {
+    if (env.SAM_GOV_API_KEY && !quotaThrottled) {
       const shapingNaics = new Set<string>();
       for (const p of activeProfiles) {
         try {
@@ -83,15 +85,17 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
           // ignore
         }
       }
-      for (const ncode of Array.from(shapingNaics).slice(0, 3)) {
+      for (const ncode of Array.from(shapingNaics).slice(0, 1)) {
         try {
-          const { notices: shapingNotices } = await samClient.fetchOpportunities({
-            postedFrom,
-            postedTo,
-            limit: 50,
-            ptype: "r",
-            naicsCode: ncode,
-          });
+          const { notices: shapingNotices, quotaThrottled: subThrottled } =
+            await samClient.fetchOpportunities({
+              postedFrom,
+              postedTo,
+              limit: 50,
+              ptype: "r",
+              naicsCode: ncode,
+            });
+          if (subThrottled) break;
           for (const sn of shapingNotices) {
             if (!notices.some((existing) => existing.noticeId === sn.noticeId)) {
               notices.push(sn);
@@ -422,6 +426,8 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       amendmentsDetected,
       attachmentsIngested,
       emailsDispatched,
+      quotaThrottled,
+      nextAccessTime,
       syncTimestamp,
     };
   } catch (err: any) {
