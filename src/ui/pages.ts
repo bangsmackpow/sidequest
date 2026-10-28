@@ -11,7 +11,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Sidequest">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" type="image/svg+xml" href="/icon-192.svg">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/icon-192.svg">
   <script>
     (function() {
@@ -42,7 +43,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       color: #fbbf24;
     }
     .kanban-col {
-      min-height: calc(100vh - 330px);
+      min-height: 480px;
+      max-height: calc(100vh - 185px);
     }
     /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -158,99 +160,138 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 </head>
 <body class="h-full flex flex-col font-sans antialiased selection:bg-amber-500 selection:text-slate-900">
   
-  <!-- Navigation Header -->
-  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+  <!-- Compact Navigation Header (Optimized for 15" Laptop Screens) -->
+  <header class="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-[1600px] mx-auto px-3 sm:px-5">
+      <div class="flex items-center justify-between h-13 py-2 gap-3">
         
-        <!-- Brand & Badges -->
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/20">
-            <i class="fa-solid fa-shield-halved text-xl"></i>
+        <!-- Left: Brand + Inline KPI Summary -->
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 font-black shadow shrink-0">
+            <i class="fa-solid fa-shield-halved text-sm"></i>
           </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <span class="font-bold text-lg tracking-tight text-white">SIDEQUEST</span>
-              <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase badge-sdvosb">
-                SDVOSB CAPTURE
-              </span>
-            </div>
-            <p class="text-xs text-slate-400">SAM.gov Opportunities & Proposal Lifecycle Platform</p>
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-bold text-base tracking-tight text-white">SIDEQUEST</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase badge-sdvosb shrink-0">
+              SDVOSB CAPTURE
+            </span>
+          </div>
+
+          <!-- Compact Inline Pipeline KPIs (replaces bulky 6-card row) -->
+          <div class="hidden xl:flex items-center gap-1.5 pl-3 ml-1 border-l border-slate-800 text-[11px]">
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              Total: <strong id="stat-total" class="text-white font-mono">0</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              New: <strong id="stat-new" class="text-amber-400 font-mono">0</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              SOW: <strong id="stat-reviewing" class="text-blue-400 font-mono">0</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              Drafting: <strong id="stat-active" class="text-amber-500 font-mono">0</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              Submitted: <strong id="stat-submitted" class="text-purple-400 font-mono">0</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+              Won: <strong id="stat-won" class="text-emerald-400 font-mono">0</strong>
+            </span>
           </div>
         </div>
 
-        <!-- Quick Metrics & Actions -->
-        <div class="flex items-center space-x-2">
-          <div id="sync-status-badge" class="hidden lg:flex items-center space-x-2 text-xs px-2.5 py-1.5 rounded-md bg-slate-800/80 border border-slate-700 text-slate-300">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="last-sync-text">SAM.gov Sync: Ready</span>
+        <!-- Right: Streamlined Action Controls -->
+        <div class="flex items-center gap-2 shrink-0">
+          <div id="sync-status-badge" class="hidden md:flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-slate-800/80 border border-slate-700 text-slate-300">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="last-sync-text">Sync Ready</span>
           </div>
 
-          <button onclick="triggerSamSync()" id="btn-sync" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs transition shadow shadow-amber-500/20">
+          <button onclick="triggerSamSync()" id="btn-sync" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs transition shadow-sm">
             <i class="fa-solid fa-rotate"></i>
             <span>Poll SAM.gov</span>
           </button>
 
-          <button onclick="openContactsModal()" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="Contracting Officer &amp; OSDBU Directory">
-            <i class="fa-solid fa-address-book mr-1 text-cyan-400"></i>KO &amp; OSDBU
-          </button>
-
-          <button onclick="openComplianceCalculatorModal()" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="FAR 52.219-27 50% Subcontracting &amp; NMR Calculator">
-            <i class="fa-solid fa-scale-balanced mr-1 text-emerald-400"></i>50% Calc
-          </button>
-
-          <button onclick="openModal('modal-profiles')" class="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
-            <i class="fa-solid fa-sliders mr-1 text-slate-400"></i>Profiles
-          </button>
-
-          <button onclick="openModal('modal-capability')" class="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
-            <i class="fa-solid fa-award mr-1 text-amber-400"></i>Credentials
-          </button>
+          <!-- Capture Tools Dropdown (Consolidates KO Directory, 50% Calc, Profiles, Credentials) -->
+          <div class="relative">
+            <button onclick="toggleToolsMenu()" id="btn-tools-menu" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition font-medium">
+              <i class="fa-solid fa-briefcase text-amber-400"></i>
+              <span>Capture Tools</span>
+              <i class="fa-solid fa-chevron-down text-[10px] text-slate-500"></i>
+            </button>
+            <div id="tools-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-1.5 z-50 text-xs space-y-0.5">
+              <button onclick="openContactsModal(); toggleToolsMenu();" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 flex items-center gap-2.5 text-slate-200">
+                <i class="fa-solid fa-address-book w-4 text-center text-cyan-400"></i>
+                <div>
+                  <div class="font-semibold">KO &amp; OSDBU Directory</div>
+                  <div class="text-[10px] text-slate-400">78+ Federal Contracting Officers</div>
+                </div>
+              </button>
+              <button onclick="openComplianceCalculatorModal(); toggleToolsMenu();" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 flex items-center gap-2.5 text-slate-200">
+                <i class="fa-solid fa-scale-balanced w-4 text-center text-emerald-400"></i>
+                <div>
+                  <div class="font-semibold">50% Subcontracting &amp; NMR Calc</div>
+                  <div class="text-[10px] text-slate-400">FAR 52.219-27 &amp; 13 CFR § 125.6</div>
+                </div>
+              </button>
+              <button onclick="openModal('modal-profiles'); toggleToolsMenu();" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 flex items-center gap-2.5 text-slate-200">
+                <i class="fa-solid fa-sliders w-4 text-center text-amber-400"></i>
+                <div>
+                  <div class="font-semibold">SAM.gov Search Profiles</div>
+                  <div class="text-[10px] text-slate-400">13 Priority NAICS &amp; Set-Asides</div>
+                </div>
+              </button>
+              <button onclick="openModal('modal-capability'); toggleToolsMenu();" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 flex items-center gap-2.5 text-slate-200">
+                <i class="fa-solid fa-award w-4 text-center text-purple-400"></i>
+                <div>
+                  <div class="font-semibold">SDVOSB Credentials</div>
+                  <div class="text-[10px] text-slate-400">UEI, CAGE &amp; Capability Statement</div>
+                </div>
+              </button>
+            </div>
+          </div>
 
           <!-- PWA Install App Button (shown when installable) -->
-          <button id="btn-pwa-install" onclick="installPwaApp()" class="hidden items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition shadow" title="Install Sidequest as a Desktop/Mobile App">
+          <button id="btn-pwa-install" onclick="installPwaApp()" class="hidden items-center gap-1 px-2 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition" title="Install Sidequest App">
             <i class="fa-solid fa-download"></i>
-            <span class="hidden md:inline">Install App</span>
+            <span class="hidden lg:inline">Install</span>
           </button>
 
-          <!-- Light / Dark Theme Toggle Button (Light Mode Default, Persisted in localStorage) -->
-          <button id="btn-theme-toggle" onclick="toggleTheme()" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="Switch between Light Mode and Dark Mode">
+          <!-- Light / Dark Theme Toggle Button -->
+          <button id="btn-theme-toggle" onclick="toggleTheme()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="Switch between Light Mode and Dark Mode">
             <i id="theme-toggle-icon" class="fa-solid fa-moon text-indigo-400"></i>
-            <span id="theme-toggle-label" class="hidden md:inline font-medium">Dark</span>
+            <span id="theme-toggle-label" class="hidden sm:inline font-medium">Dark</span>
           </button>
 
-          <!-- Admin Console Button (Only shown for Admin) -->
-          <button id="btn-admin-console" onclick="openAdminConsoleModal()" class="px-2.5 py-1.5 rounded-md bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs border border-indigo-500/40 font-semibold transition flex items-center">
-            <i class="fa-solid fa-users-gear mr-1.5"></i>Admin Console
-          </button>
-
-          <!-- User Account Menu -->
-          <div class="relative flex items-center gap-2">
-            <button onclick="toggleUserMenu()" id="btn-user-menu" class="flex items-center space-x-2 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
+          <!-- User Account & Admin Menu -->
+          <div class="relative flex items-center gap-1.5">
+            <button onclick="toggleUserMenu()" id="btn-user-menu" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
               <i class="fa-solid fa-circle-user text-amber-400"></i>
-              <span id="nav-user-name" class="font-semibold max-w-[120px] truncate">Admin</span>
+              <span id="nav-user-name" class="font-semibold max-w-[100px] truncate">Admin</span>
               <span id="nav-mfa-indicator" class="w-2 h-2 rounded-full bg-amber-400" title="MFA Status"></span>
               <i class="fa-solid fa-chevron-down text-[10px] text-slate-500"></i>
             </button>
 
-            <!-- Direct Header Log Out Button -->
-            <button onclick="handleSignOut()" id="btn-header-logout" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-xs text-slate-300 border border-slate-700 hover:border-rose-800/80 transition" title="Log out of platform">
+            <!-- Compact Header Log Out Button -->
+            <button onclick="handleSignOut()" id="btn-header-logout" class="flex items-center px-2 py-1.5 rounded-md bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-xs text-slate-300 border border-slate-700 hover:border-rose-800/80 transition" title="Log out of platform">
               <i class="fa-solid fa-arrow-right-from-bracket text-rose-400"></i>
-              <span class="hidden sm:inline font-semibold">Log Out</span>
             </button>
 
             <!-- Header Sign In Button (shown when logged out) -->
-            <button onclick="openSignInModal()" id="btn-header-signin" class="hidden flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-xs text-slate-950 font-bold transition">
-              <i class="fa-solid fa-right-to-bracket mr-1"></i>
+            <button onclick="openSignInModal()" id="btn-header-signin" class="hidden flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-amber-500 hover:bg-amber-400 text-xs text-slate-950 font-bold transition">
+              <i class="fa-solid fa-right-to-bracket"></i>
               <span>Sign In</span>
             </button>
 
             <!-- Dropdown Menu -->
-            <div id="user-dropdown" class="hidden absolute right-0 top-full mt-2 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
+            <div id="user-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-64 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
               <div class="px-3 py-2 border-b border-slate-800 text-[11px]">
                 <div id="menu-user-email" class="font-mono text-slate-300 truncate">admin@sdvosb-proposals.mil</div>
                 <div id="menu-user-role" class="text-amber-400 font-semibold uppercase mt-0.5">Role: Administrator</div>
               </div>
+              <button onclick="openAdminConsoleModal(); toggleUserMenu();" id="menu-admin-item" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 flex items-center text-indigo-300 font-semibold">
+                <i class="fa-solid fa-users-gear mr-2 text-indigo-400"></i>Admin Console (Users &amp; Roles)
+              </button>
               <button onclick="openMfaModal(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 flex items-center justify-between text-slate-200">
                 <span><i class="fa-solid fa-shield-halved mr-2 text-amber-400"></i>Two-Factor Authentication</span>
                 <span id="menu-mfa-badge" class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300">Grace</span>
@@ -258,12 +299,9 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               <button onclick="openChangePasswordModal(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 flex items-center text-slate-200">
                 <i class="fa-solid fa-key mr-2 text-slate-400"></i>Change Password
               </button>
-              <button onclick="openAdminConsoleModal(); toggleUserMenu();" id="menu-admin-item" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 flex items-center text-indigo-300 font-medium">
-                <i class="fa-solid fa-users-gear mr-2 text-indigo-400"></i>Manage Users &amp; Roles
-              </button>
               <div class="border-t border-slate-800 my-1"></div>
               <button onclick="purgeDemoData(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 text-emerald-400 flex items-center font-medium">
-                <i class="fa-solid fa-broom mr-2 text-emerald-400"></i>Purge Demo Data (Live Only)
+                <i class="fa-solid fa-broom mr-2 text-emerald-400"></i>Reset Pipeline (Live Only)
               </button>
               <button onclick="seedDemoData(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 text-slate-400 flex items-center">
                 <i class="fa-solid fa-database mr-2 text-slate-500"></i>Seed Demo Data
@@ -284,53 +322,26 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
     </div>
   </header>
 
-  <!-- MFA Security Reminder / Enforcement Banner -->
-  <div id="mfa-alert-banner" class="hidden border-b py-2 px-4 text-xs font-medium flex items-center justify-between">
-    <div class="max-w-7xl mx-auto w-full flex items-center justify-between">
+  <!-- MFA Security Reminder / Enforcement Banner (Dismissible) -->
+  <div id="mfa-alert-banner" class="hidden border-b py-1.5 px-4 text-xs font-medium">
+    <div class="max-w-[1600px] mx-auto w-full flex items-center justify-between gap-2">
       <div class="flex items-center space-x-2" id="mfa-banner-text">
         <i class="fa-solid fa-shield-halved text-amber-400"></i>
         <span>Security Alert: Multi-Factor Authentication (MFA) is mandatory for federal SDVOSB capture compliance.</span>
       </div>
-      <button onclick="openMfaModal()" class="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow">
-        Setup MFA Now
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="openMfaModal()" class="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow">
+          Setup MFA
+        </button>
+        <button onclick="document.getElementById('mfa-alert-banner').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 px-1" title="Dismiss banner">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Metric Strip -->
-  <section class="bg-slate-900/40 border-b border-slate-800/80 py-3">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">Identified Opportunities</span>
-          <span id="stat-total" class="text-lg font-bold text-white">0</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">New Notices</span>
-          <span id="stat-new" class="text-lg font-bold text-amber-400">0</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">Reviewing SOW</span>
-          <span id="stat-reviewing" class="text-lg font-bold text-blue-400">0</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">Drafting RFI Proposal</span>
-          <span id="stat-active" class="text-lg font-bold text-amber-500">0</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">Submitted Proposals</span>
-          <span id="stat-submitted" class="text-lg font-bold text-purple-400">0</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-          <span class="text-slate-400 block text-[11px]">Won / Awarded</span>
-          <span id="stat-won" class="text-lg font-bold text-emerald-400">0</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- Main View Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <main class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-5 py-3">
     ${content}
   </main>
 
@@ -368,15 +379,30 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 
     function toggleUserMenu() {
       const menu = document.getElementById("user-dropdown");
+      const tools = document.getElementById("tools-dropdown");
+      if (tools) tools.classList.add("hidden");
       if (menu) menu.classList.toggle("hidden");
     }
 
-    // Close menu when clicking outside
+    function toggleToolsMenu() {
+      const tools = document.getElementById("tools-dropdown");
+      const menu = document.getElementById("user-dropdown");
+      if (menu) menu.classList.add("hidden");
+      if (tools) tools.classList.toggle("hidden");
+    }
+    window.toggleToolsMenu = toggleToolsMenu;
+
+    // Close menus when clicking outside
     document.addEventListener("click", (e) => {
       const btn = document.getElementById("btn-user-menu");
       const dropdown = document.getElementById("user-dropdown");
       if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.add("hidden");
+      }
+      const toolsBtn = document.getElementById("btn-tools-menu");
+      const toolsDropdown = document.getElementById("tools-dropdown");
+      if (toolsBtn && toolsDropdown && !toolsBtn.contains(e.target) && !toolsDropdown.contains(e.target)) {
+        toolsDropdown.classList.add("hidden");
       }
     });
 
@@ -656,22 +682,21 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
           : cnt > 0
             ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/40 font-semibold"
             : "bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700";
-        return \`<button onclick="selectPriorityNaics('\${n.code}')" title="\${escapeHtml(n.title)}" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${cls}">
-          <span class="font-mono font-bold">\${n.code}</span>
-          <span class="hidden sm:inline">\${escapeHtml(n.shortLabel)}</span>
-          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/40 font-mono">\${cnt}</span>
+        return \`<button onclick="selectPriorityNaics('\${n.code}')" title="\${escapeHtml(n.code + ' — ' + n.shortLabel + ': ' + n.title)}" class="px-2 py-0.5 rounded-md border text-[11px] transition flex items-center gap-1 \${cls}">
+          <span class="font-mono">\${n.code}</span>
+          <span class="opacity-75 font-mono text-[10px]">(\${cnt})</span>
         </button>\`;
       }).join("");
 
       bar.innerHTML = \`
-        <button onclick="selectPriorityNaics('')" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${allBtnClass}">
-          <span>All Notices</span>
-          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/30 font-mono">\${opps.length}</span>
+        <button onclick="selectPriorityNaics('')" class="px-2 py-0.5 rounded-md border text-[11px] transition flex items-center gap-1 \${allBtnClass}">
+          <span>All</span>
+          <span class="opacity-80 font-mono text-[10px]">(\${opps.length})</span>
         </button>
-        <button onclick="selectPriorityNaics('PRIORITY_ALL')" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${priorityAllClass}">
-          <i class="fa-solid fa-star text-[10px]"></i>
-          <span>All 13 Target NAICS</span>
-          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/30 font-mono">\${priorityTotal}</span>
+        <button onclick="selectPriorityNaics('PRIORITY_ALL')" class="px-2.5 py-0.5 rounded-md border text-[11px] transition flex items-center gap-1 \${priorityAllClass}">
+          <i class="fa-solid fa-star text-[9px]"></i>
+          <span>13 Target NAICS</span>
+          <span class="opacity-80 font-mono text-[10px]">(\${priorityTotal})</span>
         </button>
         \${pillsHtml}
       \`;
@@ -2744,77 +2769,66 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 
 export function renderKanbanBoard(): string {
   return `
-    <div class="space-y-4">
+    <div class="space-y-3">
 
-      <!-- Front-and-Center Priority Target NAICS Focus Bar (13 Target Codes) -->
-      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5 shadow-sm">
+      <!-- Unified Search, Filter & 13 Target NAICS Control Bar -->
+      <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 shadow-sm text-xs">
+        
+        <!-- Row 1: Search & Dropdown Filters -->
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-              <i class="fa-solid fa-bullseye"></i>Target NAICS Focus
-            </span>
-            <span class="text-xs font-semibold text-slate-200">Your 13 Core NAICS Capture Codes</span>
-            <span id="priority-naics-summary" class="text-[11px] text-slate-400 font-mono">Loading live NAICS matches...</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="triggerSamSync()" class="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-[11px] font-semibold transition flex items-center gap-1.5" title="Poll SAM.gov (30-day window when a specific NAICS code is selected)">
-              <i class="fa-solid fa-satellite-dish text-[10px]"></i>
-              <span>Poll SAM.gov for Selected NAICS</span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <select id="filter-naics" onchange="populateDynamicNaicsFilter(currentOpportunities); applyFilters();" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-slate-200 font-medium">
+              <option value="">All NAICS</option>
+              <option value="PRIORITY_ALL">★ All 13 Target NAICS</option>
+            </select>
+
+            <select id="filter-setaside" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-slate-200">
+              <option value="" selected>All Set-Asides</option>
+              <option value="SDVOSBC">SDVOSBC (Set-Aside)</option>
+              <option value="SDVOSBS">SDVOSBS (Sole Source)</option>
+              <option value="VOSBC">VOSBC (Veteran-Owned)</option>
+              <option value="SBA">SBA (Rule-of-Two Flip)</option>
+            </select>
+
+            <select id="filter-notice-type" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-slate-200">
+              <option value="">All Stages</option>
+              <option value="p">Presolicitation (p)</option>
+              <option value="r">Sources Sought / RFI (r)</option>
+              <option value="k">Combined Synopsis / SAT (k)</option>
+              <option value="o">Solicitation / RFP (o)</option>
+              <option value="s">Special / Sole Source (s)</option>
+              <option value="a">Market Awards (a)</option>
+            </select>
+
+            <button id="btn-sat-toggle" onclick="toggleSatFilter()" class="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>SAT &lt; $250k</span>
+            </button>
+
+            <button id="btn-ro2-toggle" onclick="toggleRuleOfTwoFilter()" class="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1" title="Show Unrestricted/Small Business Sources Sought to flip to SDVOSBC">
+              <span class="w-1.5 h-1.5 rounded-full bg-fuchsia-400"></span>
+              <span>Rule-of-Two</span>
             </button>
           </div>
-        </div>
-        <div id="priority-naics-pills" class="flex flex-wrap items-center gap-1.5">
-          <!-- Populated dynamically by renderPriorityNaicsBar() -->
-        </div>
-      </div>
-      
-      <!-- Filter Bar -->
-      <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div class="flex items-center space-x-2 flex-wrap gap-y-2">
-          <span class="text-slate-400 font-semibold"><i class="fa-solid fa-filter mr-1.5 text-slate-500"></i>Filters:</span>
-          
-          <select id="filter-setaside" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
-            <option value="" selected>All Set-Asides (Incl. Rule-of-Two)</option>
-            <option value="SDVOSBC">SDVOSBC (SDVOSB Set-Aside)</option>
-            <option value="SDVOSBS">SDVOSBS (SDVOSB Sole Source)</option>
-            <option value="VOSBC">VOSBC (Veteran-Owned)</option>
-            <option value="SBA">SBA (Rule-of-Two Flip Target)</option>
-          </select>
 
-          <select id="filter-notice-type" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
-            <option value="">All Notice Stages</option>
-            <option value="p">Presolicitation (p)</option>
-            <option value="r">Sources Sought / RFI (r)</option>
-            <option value="k">Combined Synopsis / SAT (k)</option>
-            <option value="o">Solicitation / RFP (o)</option>
-            <option value="s">Special / Sole Source (s)</option>
-            <option value="a">Award Notice / Market Awards (a)</option>
-          </select>
-
-          <select id="filter-naics" onchange="populateDynamicNaicsFilter(currentOpportunities); applyFilters();" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
-            <option value="">All NAICS</option>
-            <option value="PRIORITY_ALL">★ All 13 Target NAICS</option>
-          </select>
-
-          <button id="btn-sat-toggle" onclick="toggleSatFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>SAT (&lt; $250k)</span>
-          </button>
-
-          <button id="btn-ro2-toggle" onclick="toggleRuleOfTwoFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5" title="Show Unrestricted/Small Business Sources Sought to flip to SDVOSBC">
-            <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
-            <span>🎯 Rule-of-Two Targets</span>
-          </button>
+          <div class="flex items-center gap-1.5">
+            <input id="search-input" onkeyup="if(event.key==='Enter') applyFilters()" placeholder="Search solicitation, agency, keyword..." class="bg-slate-800 border border-slate-700 rounded-md px-2.5 py-1 text-slate-200 placeholder-slate-500 w-52 sm:w-64 focus:outline-none focus:border-amber-500">
+            <button onclick="applyFilters()" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium">Search</button>
+          </div>
         </div>
 
-        <div class="flex items-center space-x-2">
-          <input id="search-input" onkeyup="if(event.key==='Enter') applyFilters()" placeholder="Search solicitation, agency, keyword..." class="bg-slate-800 border border-slate-700 rounded px-3 py-1 text-slate-200 placeholder-slate-500 w-64 focus:outline-none focus:border-amber-500">
-          <button onclick="applyFilters()" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium">Search</button>
+        <!-- Row 2: Compact 13 Priority Target NAICS Quick-Filter Strip -->
+        <div class="pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-1.5">
+          <div class="flex items-center gap-1 flex-wrap" id="priority-naics-pills">
+            <!-- Populated dynamically by renderPriorityNaicsBar() -->
+          </div>
+          <span id="priority-naics-summary" class="text-[10px] text-slate-400 font-mono hidden xl:inline shrink-0"></span>
         </div>
+
       </div>
 
       <!-- Kanban Pipeline Columns -->
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 overflow-x-auto pb-4">
         
         <!-- Column 1: New Opportunities -->
         <div class="flex flex-col rounded-2xl bg-slate-950/70 border border-slate-800/80 p-3 kanban-col shadow-inner">

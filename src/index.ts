@@ -94,6 +94,105 @@ function renderAppIconSvg(size: number): string {
 </svg>`;
 }
 
+app.get("/favicon.svg", (c) => {
+  return c.body(renderAppIconSvg(64), 200, {
+    "Content-Type": "image/svg+xml; charset=utf-8",
+    "Cache-Control": "public, max-age=86400",
+  });
+});
+
+function generateFaviconIco(): Uint8Array {
+  const w = 16;
+  const h = 16;
+  const bmpHeaderSize = 40;
+  const pixelBytes = w * h * 4;
+  const maskBytes = h * 4; // each row padded to 32 bits
+  const imageSize = bmpHeaderSize + pixelBytes + maskBytes;
+  const totalSize = 6 + 16 + imageSize;
+  const buf = new Uint8Array(totalSize);
+  const view = new DataView(buf.buffer);
+
+  // ICONDIR (6 bytes)
+  view.setUint16(0, 0, true); // Reserved
+  view.setUint16(2, 1, true); // Type: 1 = ICO
+  view.setUint16(4, 1, true); // Count: 1 image
+
+  // ICONDIRENTRY (16 bytes)
+  buf[6] = w;
+  buf[7] = h;
+  buf[8] = 0; // Color palette
+  buf[9] = 0; // Reserved
+  view.setUint16(10, 1, true); // Color planes
+  view.setUint16(12, 32, true); // Bits per pixel
+  view.setUint32(14, imageSize, true);
+  view.setUint32(18, 22, true); // Offset
+
+  // BITMAPINFOHEADER (40 bytes at offset 22)
+  view.setUint32(22, bmpHeaderSize, true);
+  view.setInt32(26, w, true);
+  view.setInt32(30, h * 2, true); // height * 2 for XOR + AND masks
+  view.setUint16(34, 1, true); // planes
+  view.setUint16(36, 32, true); // bpp
+  view.setUint32(38, 0, true); // compression
+  view.setUint32(42, pixelBytes + maskBytes, true);
+
+  // Draw 16x16 icon (bottom-up rows in BMP)
+  const pixelOffset = 62;
+  for (let y = 0; y < h; y++) {
+    const ty = h - 1 - y; // top-down y
+    for (let x = 0; x < w; x++) {
+      const idx = pixelOffset + (y * w + x) * 4;
+      // Rounded corner clipping
+      const dx = Math.min(x, w - 1 - x);
+      const dy = Math.min(ty, h - 1 - ty);
+      if (dx === 0 && dy === 0) {
+        buf[idx + 3] = 0; // transparent corner
+        continue;
+      }
+      // Check if inside shield
+      const cx = Math.abs(x - 7.5);
+      const inShield =
+        ty >= 3 &&
+        ty <= 13 &&
+        cx <= (ty <= 7 ? 4.5 : 4.5 - (ty - 7) * 0.65);
+      const inCenterGold =
+        ty >= 6 && ty <= 9 && cx <= 1.6;
+
+      if (inCenterGold) {
+        // Gold star (#fbbf24 -> B:0x24, G:0xbf, R:0xfb)
+        buf[idx] = 0x24;
+        buf[idx + 1] = 0xbf;
+        buf[idx + 2] = 0xfb;
+        buf[idx + 3] = 0xff;
+      } else if (inShield) {
+        // Dark slate shield (#0f172a -> B:0x2a, G:0x17, R:0x0f)
+        buf[idx] = 0x2a;
+        buf[idx + 1] = 0x17;
+        buf[idx + 2] = 0x0f;
+        buf[idx + 3] = 0xff;
+      } else {
+        // Amber background (#f59e0b -> B:0x0b, G:0x9e, R:0xf5)
+        buf[idx] = 0x0b;
+        buf[idx + 1] = 0x9e;
+        buf[idx + 2] = 0xf5;
+        buf[idx + 3] = 0xff;
+      }
+    }
+  }
+  return buf;
+}
+
+app.get("/favicon.ico", () => {
+  const ico = generateFaviconIco();
+  return new Response(ico.buffer as ArrayBuffer, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/x-icon",
+      "Cache-Control": "public, max-age=86400",
+    },
+  });
+});
+
 app.get("/icon-192.svg", (c) => {
   return c.body(renderAppIconSvg(192), 200, {
     "Content-Type": "image/svg+xml; charset=utf-8",
