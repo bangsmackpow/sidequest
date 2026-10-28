@@ -5,11 +5,14 @@
 [![Database](https://img.shields.io/badge/Database-Cloudflare%20D1%20SQLite-yellow)](https://developers.cloudflare.com/d1/)
 [![ORM](https://img.shields.io/badge/ORM-Drizzle%20ORM-green)](https://orm.drizzle.team/)
 [![Authentication](https://img.shields.io/badge/Auth-Better%20Auth%20%2B%20TOTP%20MFA-purple)](https://better-auth.com/)
-[![Tests](https://img.shields.io/badge/Tests-17%2F17%20Passing-brightgreen)](tests/)
+[![PWA](https://img.shields.io/badge/PWA-Installable%20%2B%20Offline%20Ready-emerald)](https://sidequest.curtislamasters.workers.dev/manifest.webmanifest)
+[![Tests](https://img.shields.io/badge/Tests-21%2F21%20Passing-brightgreen)](tests/)
 
-A multi-user, multi-tenant federal contracting capture engine and opportunity pipeline tailored for Service-Disabled Veteran-Owned Small Businesses (SDVOSB). The system continuously polls SAM.gov Opportunities APIs, flags high-priority RFIs/Sources Sought and Simplified Acquisition Threshold opportunities, stores solicitation files and SOWs in Cloudflare R2, intercepts contracting officer correspondence via Cloudflare Email Routing, enforces strict multi-factor authentication (MFA), and automates proposal response drafting.
+A multi-user, multi-tenant federal contracting capture engine, compliance suite, and proposal lifecycle platform built for **Service-Disabled Veteran-Owned Small Businesses (SDVOSB)**. Sidequest polls live SAM.gov Opportunities APIs across all 6 notice stages (`p,r,k,o,s,a`), spotlights **13 core target NAICS codes**, detects solicitation amendments and Rule-of-Two set-aside conversion targets, indexes attachments in Cloudflare R2, manages bidirectional Contracting Officer & OSDBU correspondence, validates **FAR 52.219-27 / 13 CFR § 125.6** subcontracting and Non-Manufacturer Rule (NMR) compliance, queries live USAspending.gov historical award intelligence, and automates 5 federal proposal templates.
 
 - **Live Production URL:** [https://sidequest.curtislamasters.workers.dev](https://sidequest.curtislamasters.workers.dev)
+- **Strategic Capture Playbook:** [`docs/SDVOSB_STRATEGIC_PLAYBOOK.md`](docs/SDVOSB_STRATEGIC_PLAYBOOK.md)
+- **Developer & Agent Guide:** [`AGENTS.md`](AGENTS.md)
 - **GitHub Repository:** [https://github.com/bangsmackpow/sidequest.git](https://github.com/bangsmackpow/sidequest.git)
 
 ---
@@ -17,166 +20,131 @@ A multi-user, multi-tenant federal contracting capture engine and opportunity pi
 ## 🏛 System Architecture & Stack
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Cloudflare Edge Network                         │
-├──────────────────┬──────────────────────┬──────────────────────────────┤
-│  Scheduled Cron  │  Email Routing       │  HTTP / Web / API            │
-│  (*/30 * * * *)  │  (CO Inbound MIME)   │  (Hono + Better Auth + UI)   │
-└────────┬─────────┴──────────┬───────────┴──────────────┬───────────────┘
-         │                    │                          │
-         ▼                    ▼                          ▼
-┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────────┐
-│  SAM.gov Search  │ │   Postal-Mime    │ │  SDVOSB Kanban Board         │
-│  API Poller      │ │   Email Parser   │ │  Section L RFI Generator     │
-└────────┬─────────┘ └────────┬─────────┘ └──────────────┬───────────────┘
-         │                    │                          │
-         └────────────────────┼──────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          Cloudflare Edge Network                           │
+├──────────────────┬──────────────────────┬──────────────────────────────────┤
+│  Scheduled Cron  │  Email Routing       │  HTTP / Web / PWA / REST API     │
+│  (0 */6 * * *)   │  (KO Inbound MIME)   │  (Hono + Better Auth + Light UI) │
+└────────┬─────────┴──────────┬───────────┴────────────────┬─────────────────┘
+         │                    │                            │
+         ▼                    ▼                            ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────────────┐
+│  SAM.gov v2 API  │ │   Postal-Mime    │ │  Kanban + 13 Target NAICS Focus  │
+│  6-Stage Poller  │ │   Email Parser   │ │  50% LoS Calc + Proposal Studio  │
+└────────┬─────────┘ └────────┬─────────┘ └────────────────┬─────────────────┘
+         │                    │                            │
+         └────────────────────┼────────────────────────────┘
                               │
-     ┌────────────────────────┼────────────────────────┐
-     ▼                        ▼                        ▼
-┌──────────────┐      ┌──────────────┐         ┌──────────────┐
-│  D1 SQLite   │      │  R2 Storage  │         │  KV State    │
-│  (Metadata)  │      │  (Artifacts) │         │  (Sync Sync) │
-└──────────────┘      └──────────────┘         └──────────────┘
+     ┌────────────────────────┼────────────────────────────┐
+     ▼                        ▼                            ▼
+┌──────────────┐      ┌──────────────┐             ┌──────────────┐
+│  D1 SQLite   │      │  R2 Storage  │             │  KV State    │
+│  (Metadata)  │      │  (Artifacts) │             │  (Sync Sync) │
+└──────────────┘      └──────────────┘             └──────────────┘
 ```
 
-- **Runtime & Hosting:** Cloudflare Workers & Cloudflare Pages (HONC full-stack pattern).
+- **Runtime & Hosting:** Cloudflare Workers (HONC full-stack pattern).
 - **Web Framework:** [Hono v4](https://hono.dev) with typed bindings and context variables.
 - **Database:** Cloudflare D1 (SQLite) with [Drizzle ORM](https://orm.drizzle.team) and automated migrations.
-- **Object Storage:** Cloudflare R2 (`sidequest-attachments`) for solicitation attachments, SOWs, email archives, and generated Section L capability statements.
+- **Object Storage:** Cloudflare R2 (`sidequest-attachments`) for raw SAM.gov JSON payloads, solicitation attachments, SOWs, email archives, and generated proposal documents.
 - **Caching & KV:** Cloudflare KV (`sidequest-kv`) for polling watermarks and fast session lookups.
 - **Authentication:** [Better Auth](https://better-auth.com) with D1 Drizzle adapter, multi-tenant organizations, and role-based access control (`admin`, `manager`, `member`).
 - **MFA / TOTP:** Native RFC 6238 Web Crypto TOTP engine with Base32 secrets, standard `otpauth://` QR URI generation, backup codes, and a strict 3-day grace period enforcement.
-- **Email Routing:** Cloudflare Email Routing with streaming RFC 822 MIME parser (`postal-mime`) and transactional outbound dispatcher.
+- **Progressive Web App (PWA) & Theme Engine:** Installable standalone PWA (`/manifest.webmanifest`, `/sw.js`, `/favicon.ico`, `/favicon.svg`) with **Light Mode by default** and a persistent **Dark Mode** toggle stored in `localStorage`.
+
+---
+
+## 🎯 Priority Target NAICS Capture Focus (13 Core Codes)
+
+Sidequest places your **13 target NAICS codes** front-and-center in a dedicated quick-filter bar above the Kanban pipeline, with 1-click filtering (`★ 13 Target NAICS`), live match badges, and targeted 30-to-60-day SAM.gov polling:
+
+| NAICS Code | Industry Label | Official NAICS Title |
+| :--- | :--- | :--- |
+| **`541519`** | IT Services / VAR | Other Computer Related Services |
+| **`423430`** | Computer & SW Wholesale | Computer and Computer Peripheral Equipment and Software Merchant Wholesalers |
+| **`513210`** | Software Publishers | Software Publishers |
+| **`334111`** | Electronic Computers | Electronic Computer Manufacturing |
+| **`423840`** | Industrial Supplies | Industrial Supplies Merchant Wholesalers |
+| **`423450`** | Medical & Hospital Equip | Medical, Dental, and Hospital Equipment and Supplies Merchant Wholesalers |
+| **`423490`** | Prof. Equipment & Supplies | Other Professional Equipment and Supplies Merchant Wholesalers |
+| **`339940`** | Office Supplies Mfg | Office Supplies (except Paper) Manufacturing |
+| **`541512`** | Systems Design | Computer Systems Design Services |
+| **`541511`** | Custom Programming | Custom Computer Programming Services |
+| **`541330`** | Engineering Services | Engineering Services |
+| **`541611`** | Management Consulting | Administrative Management and General Management Consulting Services |
+| **`541690`** | Tech Consulting | Other Scientific and Technical Consulting Services |
+
+---
+
+## ⚡ Core Capture, Compliance & Intelligence Features
+
+### 1. Full 6-Stage SAM.gov Ingestion & Amendment Engine (`src/workers/ingest.ts`)
+- Automatically polls `https://api.sam.gov/opportunities/v2/search` every 6 hours (`0 */6 * * *`) or on demand via **Poll SAM.gov** (`POST /api/v1/ingest/run`).
+- Tracks all 6 procurement lifecycle notice types:
+  - `p` — Presolicitation
+  - `r` — Sources Sought / RFI (including **Rule-of-Two Set-Aside Flip** candidates)
+  - `k` — Combined Synopsis/Solicitation (Fast-Track SAT RFQs)
+  - `o` — Solicitation / RFP / IFB
+  - `s` — Special Notice / Sole Source Intent (`FAR 19.1406`)
+  - `a` — Award Notice (badged as `🏆 Market Award (Competitor)` for subcontracting & recompete intelligence)
+- **Strict Personal Pipeline Hygiene:** All newly ingested SAM.gov notices start in **New Notices (`new`)**, ensuring **Reviewing SOW**, **Drafting RFI**, **Submitted**, and **My Won Contracts** only contain opportunities you personally advance.
+- **Hierarchy & Contact Decoding:** Automatically parses SAM.gov v2 `fullParentPathName` into Department, Sub-Tier, and Contracting Office hierarchies and extracts verified Contracting Officer points of contact.
+- **Solicitation Amendment Diffing:** Detects deadline extensions, set-aside code flips, and notice stage transitions, logging automated `amendment` alerts.
+
+### 2. Bidirectional Contracting Officer & OSDBU Communications
+- **Inbound Email Interception (`src/workers/email.ts`):** Parses RFC 822 MIME streams via `postal-mime`, matches solicitation numbers, archives attachments to R2, and logs correspondence to `opportunity_notes`.
+- **Outbound KO & OSDBU Email Dispatch (`POST /api/v1/opportunities/:id/send-email`):** Compose and send formal emails (Capability Statements, Rule-of-Two Set-Aside Requests, Solicitation Q&A) directly to the Procuring Contracting Officer (KO) or Agency OSDBU from inside any Opportunity Detail modal, with automatic audit logging.
+- **KO & OSDBU Contact Registry (`GET /api/v1/contacts`):** Searchable directory of federal Contracting Officers and Specialists extracted from live SAM.gov notices.
+
+### 3. FAR 52.219-27 Limitations on Subcontracting (50% Rule) & NMR Calculator (`src/services/compliance-and-intel.ts`)
+- **Interactive 50% Subcontracting Calculator (`POST /api/v1/compliance/calculate-los`):**
+  - Computes net services/supply cost, **Prime SDVOSB + Similarly Situated Entity (SSE)** combined share (`13 CFR § 125.6`), and non-SDVOSB subcontractor share against statutory ceilings (`50%` for Services/Supplies, `85%` for General Construction, `75%` for Specialty Trade).
+  - Flags illegal pass-through structures (`> 50%` non-SSE subcontracting) and calculates the exact dollar adjustment required to achieve compliance.
+- **SBA Non-Manufacturer Rule (NMR) Waiver Checker (`POST /api/v1/compliance/check-nmr`):**
+  - Evaluates hardware, IT VAR, medical, and supply NAICS codes (`334111`, `541519`, `423430`, `423450`, etc.) for SBA Class Waivers, domestic small-business manufacturer requirements, and `< $250,000` SAT strategies.
+
+### 4. USAspending.gov Historical Award & Incumbent Intelligence
+- **Live Federal Award Lookup (`GET /api/v1/opportunities/:id/award-intel`):**
+  - Queries the public **USAspending.gov v2 API** by NAICS code and agency to surface recent awardees, award amounts, contract numbers, and action dates alongside local SAM.gov Award Notice intelligence.
+
+### 5. 5-Template Proposal Studio (`src/services/rfi-generator.ts`)
+Generates tailored, Markdown-formatted capture documents archived in Cloudflare R2:
+1. **`capability_statement`:** Section L Compliant Sources Sought / RFI Capability Statement
+2. **`sat_quote`:** Simplified Acquisition Threshold (`< $250k`) Fast-Track Commercial Quote (`FAR Part 13`)
+3. **`past_performance`:** Past Performance Relevancy & CPARS Matrix (`Section M`)
+4. **`rule_of_two_shaping`:** Rule-of-Two Set-Aside Conversion & `Kingdomware` (`38 U.S.C. § 8127(d)`) Request Letter
+5. **`rfp_qa_inquiries`:** Formal Solicitation Q&A & Industry Inquiry Matrix
+
+### 6. Laptop-Optimized UI, Light/Dark Theme & PWA (`src/ui/pages.ts`, `src/index.ts`)
+- **Decluttered Top Bar (`max-w-[1600px]`):** Designed to fit comfortably on 15.6" laptop screens (such as Lenovo ThinkPad T15 at 125%–150% scaling) with inline pipeline KPI counters and a consolidated **Capture Tools ▾** menu.
+- **Light Mode Default + Dark Mode Memory:** Renders in a high-contrast daylight-readable **Light Mode** by default with a 1-click **Dark / Light** toggle remembered in `localStorage`.
+- **Full PWA & Favicon Support:** Includes `/manifest.webmanifest`, `/sw.js` service worker, `/icon-192.svg`, `/icon-512.svg`, `/favicon.ico`, and `/favicon.svg`.
 
 ---
 
 ## 🔐 Authentication, MFA & Access Control
 
-### 1. Initial Administrator Seed Account
-The database comes seeded with an initial platform administrator:
+### Initial Administrator Account
 - **Email:** `admin@sdvosb-proposals.mil`
 - **Initial Password:** `AdminSDVOSB!2026#Secure`
 - **Role:** `admin` (Platform Administrator)
-- **Organization:** `org_demo_sdvosb` (Valiant Defense Technologies)
 
-> [!IMPORTANT]
-> **Change Password on First Login:** Use the user dropdown menu → **"Change Password"** to update your credentials.
-
-### 2. Multi-Factor Authentication (MFA / TOTP)
-- Edge-native implementation in [`src/auth/totp.ts`](src/auth/totp.ts) using `crypto.subtle` (HMAC-SHA1, 30-second time steps, ±1 step drift tolerance).
-- Standard compatibility with Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden, and Apple Passwords.
-- Generates 8 one-time alphanumeric backup recovery codes upon initialization.
-- **3-Day Grace Period Enforcement:**
-  - **Days 0–3:** The dashboard displays an alert banner showing the countdown of remaining days (`remainingGraceDays`). All capture operations remain accessible.
-  - **After Day 3:** If `twoFactorEnabled === false`, all API write/mutation requests (pipeline updates, RFI generation, profile creation) are blocked with `403 MFA_REQUIRED` until MFA setup is verified.
-
-### 3. Password Reset Workflow
-- Public self-service password reset request via `POST /api/v1/auth/forgot-password`.
-- Cryptographic verification tokens stored in D1's `verifications` table with expiration limits.
-- Reset completion via `POST /api/v1/auth/reset-password` updates hashed credentials in `accounts` table using `hashPassword` (`better-auth/crypto`) and purges prior active sessions.
-
-### 4. Administrative User Management Console
-Administrators have access to a dedicated Admin Console (via UI or `/api/v1/admin/users/*`):
-- **User Roster:** Real-time view of all users, organizational roles, account ages, and MFA compliance states (`Active`, `Grace Period`, or `Expired`).
-- **User Creation:** Provision new team members with specific roles and optional temporary passwords (`POST /api/v1/admin/users`).
-- **User Editing:** Update user full display names, email addresses, and roles (`PATCH /api/v1/admin/users/:id`). Automatically updates associated credential accounts.
-- **Admin Password Reset:** Issue new temporary credentials for team members (`POST /api/v1/admin/users/:id/reset-password`).
-- **Admin MFA Reset:** Clear registered authenticator secrets to allow a locked-out user to re-enroll their device (`POST /api/v1/admin/users/:id/reset-mfa`).
-- **User Deletion:** Permanently revoke access and purge sessions (`DELETE /api/v1/admin/users/:id`) with safeguards preventing self-deletion.
-
-### 5. Header Sign In & Log Out Workflow
-- Prominent **"Log Out"** button located directly in the top navigation bar and inside the user dropdown menu.
-- Logging out calls `POST /api/v1/auth/sign-out`, deletes the active session from Cloudflare D1 `sessions`, clears session cookies (`sidequest_session` and `better-auth.session_token`), and resets local storage.
-- When signed out, the navbar displays a **"Sign In"** button that opens a modern modal with email, password, and optional TOTP MFA inputs.
-
----
-
-## 🗄 Database Schema (`src/db/schema.ts`)
-
-```mermaid
-erDiagram
-    users ||--o{ sessions : "has"
-    users ||--o{ accounts : "has"
-    users ||--o{ two_factors : "has"
-    users ||--o{ members : "belongs to"
-    organizations ||--o{ members : "contains"
-    organizations ||--o{ saved_search_profiles : "owns"
-    organizations ||--o{ capability_statements : "owns"
-    opportunities ||--o{ opportunity_attachments : "has"
-    opportunities ||--o{ opportunity_notes : "has"
-    opportunities ||--o{ opportunity_alerts : "triggers"
-```
-
-1. **Authentication & Multi-Tenancy:**
-   - `users`: User identity, email verification, `two_factor_enabled`, `role`, `banned`, `ban_reason`, `ban_expires`.
-   - `sessions`: Session tracking with `token`, `expires_at`, `active_organization_id`, `impersonated_by`.
-   - `accounts`: Credential and OAuth provider accounts (`provider_id = 'credential'`).
-   - `verifications`: Nonce, password reset, and email verification tokens with expiration.
-   - `two_factors`: TOTP Base32 secrets, serialized backup recovery codes, and verification status.
-   - `organizations`: Multi-tenant organization records.
-   - `members`: Tenant membership records mapping `user_id` to `organization_id` with role (`admin`, `manager`, `member`).
-2. **`saved_search_profiles`:**
-   - Organization-specific NAICS codes (e.g. `["541512", "541519"]`), set-aside codes (`SDVOSBC`, `VOSBC`), notice types (`r` for Sources Sought, `o` for Solicitations), and Simplified Acquisition Threshold ($250,000) limits.
-3. **`opportunities`:**
-   - Synced SAM.gov notices: `id` (noticeId), `solicitation_number`, `title`, `agency`, `sub_tier`, `office`, `posted_date`, `response_deadline`, `naics_code`, `set_aside_code`, `notice_type`, `ui_link`, `status` (`new`, `reviewing_sow`, `drafting_rfi`, `submitted`, `won`, `lost`, `archived`).
-4. **`opportunity_attachments`:**
-   - Solicitations, SOWs, and generated capability statements linked to Cloudflare R2 object keys.
-5. **`capability_statements`:**
-   - Corporate UEI, CAGE code, SBA VetCert SDVOSB certification status, core competencies, and past performance matrices.
-6. **`opportunity_notes`:**
-   - Capture analyst notes and automatically parsed correspondence from federal Contracting Officers.
-7. **`opportunity_alerts`:**
-   - High-priority audit trail triggered when incoming opportunities match active search profiles.
-
----
-
-## ⚡ Core Engine Components
-
-### 1. Worker Ingestion Engine (`src/workers/ingest.ts`)
-- Automatically triggered every 30 minutes via Cloudflare Cron (`triggers.crons: ["*/30 * * * *"]`).
-- Reads the last sync watermark from KV (`sam_last_sync_timestamp`), defaulting to the past 24 hours.
-- Queries `https://api.sam.gov/opportunities/v2/search` with `typeOfSetAside=SDVOSBC` and `ptype=r,o`.
-- Paginates transparently when `totalRecords > 100`.
-- Stores raw solicitation JSON in R2 at `raw/opportunities/${noticeId}.json`.
-- Upserts metadata records into D1 `opportunities` using `onConflictDoUpdate` without disrupting active pipeline stages.
-- Cross-references notices against `saved_search_profiles` and creates alert records for high-priority matches.
-
-### 2. Inbound Email Handler (`src/workers/email.ts`)
-- Cloudflare native `email` worker handler for `<prefix>@domain.com`.
-- Extracts RFC 822 MIME stream and parses headers, text, HTML, and attachments using `postal-mime`.
-- Detects federal solicitation numbers and opportunity IDs.
-- Archives email text, HTML, and attachments to R2 under `emails/${opportunity_id}/${messageId}/`.
-- Logs correspondence into `opportunity_notes` with download links to archived attachments.
-
-### 3. RFI Response & Section L Generator (`src/services/rfi-generator.ts`)
-- Generates compliant Sources Sought / RFI capability statements tailored to Section L requirements.
-- Automatically injects corporate UEI, CAGE code, SBA VetCert SDVOSB verification status, and **FAR 52.219-27 / 13 CFR § 125.6** subcontracting limitation attestations.
-- Generates executive summaries, technical staffing approaches, and past performance matrices.
-- Archives generated documents to Cloudflare R2 (`proposals/${oppId}/...`) and transitions opportunity status to `drafting_rfi`.
-
-### 4. Interactive GovTech UI (`src/ui/pages.ts`)
-- Modern dark-mode interface styled with Tailwind CSS.
-- **Kanban Pipeline Board:** [New Notices] ➔ [Reviewing SOW] ➔ [Drafting RFI] ➔ [Submitted] ➔ [Won / Awarded].
-- Instant filtering by NAICS code, set-aside code, Simplified Acquisition Threshold (< $250k), and keyword search.
-- One-click SAM.gov polling trigger with real-time sync metrics.
-- Modals for Opportunity Details, Contracting Officer correspondence, Search Profiles, and SDVOSB Credentials.
+### Multi-Factor Authentication (MFA / TOTP) & 3-Day Grace Period
+- Edge-native RFC 6238 TOTP implementation in [`src/auth/totp.ts`](src/auth/totp.ts) using `crypto.subtle`.
+- **Days 0–3:** Users can operate within a 3-day grace window with a dismissible reminder banner.
+- **After Day 3:** If `twoFactorEnabled === false`, all write/mutation requests return `403 MFA_REQUIRED` until 2FA is enabled.
 
 ---
 
 ## 📡 API Reference
 
-### Public Authentication Endpoints
+### Public & Authenticated Auth Endpoints (`/api/v1/auth/*`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/auth/sign-in` | Authenticate with email, password, and optional 6-digit TOTP code |
 | `POST` | `/api/v1/auth/sign-out` | Purge session from D1, invalidate session cookies, and log out |
 | `POST` | `/api/v1/auth/forgot-password` | Generate verification token and dispatch password reset link |
 | `POST` | `/api/v1/auth/reset-password` | Verify reset token and update password hash |
-
-### Authenticated Profile & MFA Endpoints (`/api/v1/auth/*`)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
 | `GET` | `/api/v1/auth/me` | Current profile, active role, and MFA compliance / grace status |
 | `POST` | `/api/v1/auth/mfa/generate` | Generate TOTP Base32 secret, QR URI, and backup codes |
 | `POST` | `/api/v1/auth/mfa/enable` | Verify 6-digit code from authenticator app and activate 2FA |
@@ -193,7 +161,7 @@ erDiagram
 | `POST` | `/api/v1/admin/users/:id/reset-mfa` | Reset MFA enrollment for locked-out user |
 | `DELETE` | `/api/v1/admin/users/:id` | Permanently delete user account and revoke sessions |
 
-### Capture & Proposal Pipeline Endpoints (`/api/v1/*`)
+### Capture, Compliance, Intelligence & Pipeline Endpoints (`/api/v1/*`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health` | Health check endpoint |
@@ -201,83 +169,37 @@ erDiagram
 | `GET` | `/api/v1/opportunities` | List & filter opportunities (`naics`, `set_aside`, `status`, `q`) |
 | `GET` | `/api/v1/opportunities/:id` | Opportunity details, attachments, notes, and alerts |
 | `PATCH` | `/api/v1/opportunities/:id/status` | Transition opportunity status along the pipeline |
-| `POST` | `/api/v1/opportunities/:id/generate-rfi` | Inject SDVOSB credentials and generate Section L RFI |
-| `GET` | `/api/v1/opportunities/:id/attachments/:attachmentId/download` | Stream attachment directly from Cloudflare R2 |
-| `POST` | `/api/v1/opportunities/:id/notes` | Add manual capture note |
+| `POST` | `/api/v1/opportunities/:id/generate-rfi` | Generate Section L RFI, SAT Quote, Past Perf, Rule-of-Two, or Q&A |
+| `POST` | `/api/v1/opportunities/:id/send-email` | Dispatch outbound email to KO or OSDBU and log to audit trail |
+| `GET` | `/api/v1/opportunities/:id/award-intel` | Fetch USAspending.gov & SAM.gov historical award intelligence |
+| `GET` | `/api/v1/contacts` | List extracted Contracting Officer & OSDBU contacts across solicitations |
+| `POST` | `/api/v1/compliance/calculate-los` | Calculate FAR 52.219-27 / 13 CFR § 125.6 50% subcontracting compliance |
+| `POST` | `/api/v1/compliance/check-nmr` | Check SBA Non-Manufacturer Rule (NMR) waivers and exemptions |
 | `GET` | `/api/v1/saved-search-profiles` | List saved search & alert profiles |
 | `POST` | `/api/v1/saved-search-profiles` | Create or update search profile |
 | `GET` | `/api/v1/capability-statements` | List corporate SDVOSB capability statements |
 | `POST` | `/api/v1/capability-statements` | Store corporate capability statement |
-| `POST` | `/api/v1/ingest/run` | Manually trigger SAM.gov synchronization |
-| `POST` | `/api/v1/email/simulate` | Test inbound email parsing and R2 archiving |
+| `POST` | `/api/v1/ingest/run` | Poll live SAM.gov API (`lookbackDays`, optional `naicsCode`) |
+| `POST` | `/api/v1/seed/purge` | Purge demo records, reset live notices to `new`, and sync 13 target NAICS |
 | `POST` | `/api/v1/seed` | Seed demonstration opportunities, profiles, and admin credentials |
 
 ---
 
-## 🚀 Setup & Local Development
+## 🚀 Setup, Verification & Deployment
 
-### 1. Prerequisites
-- Node.js (v20+ or v22 LTS recommended)
-- `pnpm` (v10+ supported)
-- Cloudflare Wrangler CLI
-
-### 2. Installation
 ```bash
-git clone https://github.com/bangsmackpow/sidequest.git
-cd sidequest
+# Install dependencies
 pnpm install
-```
 
-### 3. Local D1 Database Migration
-```bash
+# Run local D1 migrations
 pnpm run db:migrate
-```
 
-### 4. Run Development Server
-```bash
-pnpm run dev
-```
-Open [http://localhost:8787](http://localhost:8787) in your browser.
-
-### 5. Run Automated Test Suite
-```bash
+# Run all 21 automated tests
 pnpm test
+
+# Run TypeScript strict type-checking
+pnpm build
+
+# Deploy to Cloudflare Workers
+npx wrangler deploy
 ```
-The test suite validates:
-- Better Auth password hashing and verification
-- TOTP RFC 6238 key generation, OTP auth URIs, and drift verification
-- 3-day grace period countdown and expired enforcement logic
-- Email validation formats and session cookie parsing
-- Postal-Mime RFC 822 email parsing and attachment extraction
-- SAM.gov mock poller and date formatting
-- Section L RFI response generation and R2 payload formatting
-
----
-
-## 📦 Cloudflare Deployment & CI/CD
-
-### 1. Provisioned Cloudflare Resources
-- **D1 Database:** `sidequest-db` (`ad0afffd-5698-461e-bef4-c4be7e51bc0f`)
-- **R2 Storage Bucket:** `sidequest-attachments`
-- **KV Namespace:** `sidequest-kv` (`b60aaeb5488f4e80b85e3fd6ef5477e2`)
-
-### 2. Required Cloudflare Secrets
-Configure the following secrets in Cloudflare Workers using Wrangler:
-```bash
-# SAM.gov API Key (from https://sam.gov/content/developer-portal)
-npx wrangler secret put SAM_GOV_API_KEY
-
-# Better Auth Secret (random 32+ character string)
-npx wrangler secret put BETTER_AUTH_SECRET
-
-# Application Base URL
-npx wrangler secret put BETTER_AUTH_URL
-```
-
-### 3. Cloudflare CI/CD Build Command
-In the Cloudflare Dashboard under **Workers & Pages > sidequest > Settings > Build**, configure:
-- **Build command:** `pnpm install && pnpm run db:migrate:remote && npx wrangler deploy`
-- **Build environment variables:**
-  - `NODE_VERSION`: `22`
-  - `PNPM_VERSION`: `10`
-- Commits pushed to `main` on GitHub are automatically built, migrated, and deployed.
