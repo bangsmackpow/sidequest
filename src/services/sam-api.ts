@@ -2,6 +2,8 @@ export interface SamGovNotice {
   noticeId: string;
   title: string;
   solicitationNumber?: string;
+  fullParentPathName?: string;
+  fullParentPathCode?: string;
   department?: string;
   subTier?: string;
   office?: string;
@@ -28,6 +30,41 @@ export interface SamGovNotice {
       ueiSAM?: string;
       cageCode?: string;
     };
+  };
+}
+
+/**
+ * Extracts agency, subTier, and contracting office from SAM.gov v2 fullParentPathName or legacy fields
+ */
+export function parseSamAgencyHierarchy(notice: SamGovNotice): {
+  agency: string;
+  subTier: string | null;
+  office: string | null;
+} {
+  if (notice.department && notice.department !== "FEDERAL AGENCY") {
+    return {
+      agency: notice.department,
+      subTier: notice.subTier || null,
+      office: notice.office || null,
+    };
+  }
+  if (notice.fullParentPathName) {
+    const parts = notice.fullParentPathName
+      .split(".")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length > 0) {
+      return {
+        agency: parts[0],
+        subTier: parts.length > 1 ? parts[1] : null,
+        office: parts.length > 2 ? parts.slice(2).join(" / ") : parts[1] || null,
+      };
+    }
+  }
+  return {
+    agency: notice.department || "FEDERAL AGENCY",
+    subTier: notice.subTier || null,
+    office: notice.office || null,
   };
 }
 

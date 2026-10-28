@@ -20,6 +20,7 @@ import {
   ProcurementCategory,
 } from "../services/compliance-and-intel";
 import { runSamIngestion } from "../workers/ingest";
+import { parseSamAgencyHierarchy } from "../services/sam-api";
 import { handleInboundEmail } from "../workers/email";
 import { OutboundEmailDispatcher } from "../workers/outbound-email";
 import { seedDatabase } from "../db/seed";
@@ -675,13 +676,31 @@ apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
   const existingPocOppIds = new Set(existingPocNotes.map((n) => n.opportunityId));
 
   let enrichedFromR2 = 0;
+  let agenciesBackfilled = 0;
   for (const opp of liveOpps) {
-    if (existingPocOppIds.has(opp.id) || !opp.rawJsonR2Key) continue;
+    if (!opp.rawJsonR2Key) continue;
+    const needsAgencyFix = opp.agency === "FEDERAL AGENCY";
+    const needsPocNote = !existingPocOppIds.has(opp.id);
+    if (!needsAgencyFix && !needsPocNote) continue;
     try {
       const obj = await c.env.BUCKET.get(opp.rawJsonR2Key);
       if (!obj) continue;
       const notice = (await obj.json()) as any;
-      if (notice.pointOfContact && Array.isArray(notice.pointOfContact) && notice.pointOfContact.length > 0) {
+      const hierarchy = parseSamAgencyHierarchy(notice);
+
+      if (needsAgencyFix && hierarchy.agency !== "FEDERAL AGENCY") {
+        await db
+          .update(opportunities)
+          .set({
+            agency: hierarchy.agency,
+            subTier: hierarchy.subTier,
+            office: hierarchy.office,
+          })
+          .where(eq(opportunities.id, opp.id));
+        agenciesBackfilled++;
+      }
+
+      if (needsPocNote && notice.pointOfContact && Array.isArray(notice.pointOfContact) && notice.pointOfContact.length > 0) {
         const pocLines = notice.pointOfContact.map(
           (p: any, idx: number) =>
             `${idx + 1}. ${p.fullName || "Contracting Officer"} (${(p.type || "primary").toUpperCase()}) — Email: ${p.email || "N/A"} | Phone: ${p.phone || "N/A"}`
@@ -692,12 +711,12 @@ apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
           organizationId: "org_demo_sdvosb",
           authorEmail: opp.pointOfContactEmail || "sam-contacts@sdvosb-platform.internal",
           subject: `Contracting Officer & OSDBU Contact Directory (${opp.solicitationNumber || opp.id})`,
-          content: `Procuring Office: ${[opp.agency, opp.subTier, opp.office].filter(Boolean).join(" / ")}\n\nRegistered Points of Contact:\n${pocLines.join("\n")}`,
+          content: `Procuring Office: ${[hierarchy.agency, hierarchy.subTier, hierarchy.office].filter(Boolean).join(" / ")}\n\nRegistered Points of Contact:\n${pocLines.join("\n")}`,
           source: "poc_directory",
         });
         enrichedFromR2++;
       }
-      if (notice.award && (notice.award.amount || notice.award.awardee)) {
+      if (needsPocNote && notice.award && (notice.award.amount || notice.award.awardee)) {
         const awardAmt = notice.award.amount
           ? `$${Number(notice.award.amount).toLocaleString("en-US")}`
           : "Published in SAM.gov";
@@ -726,7 +745,8 @@ apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
     success: true,
     liveOpportunitiesRemaining: remaining?.count || 0,
     contactsEnrichedFromR2: enrichedFromR2,
-    message: `Purged all seeded demo records. ${remaining?.count || 0} live SAM.gov opportunities active (${enrichedFromR2} enriched with full KO contact cards from R2).`,
+    agenciesBackfilled,
+    message: `Purged all seeded demo records. ${remaining?.count || 0} live SAM.gov opportunities active (${enrichedFromR2} enriched with full KO contact cards, ${agenciesBackfilled} agency hierarchies decoded from R2).`,
   });
 });
 

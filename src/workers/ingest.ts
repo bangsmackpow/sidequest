@@ -8,7 +8,7 @@ import {
   opportunityAttachments,
   users,
 } from "../db/schema";
-import { SamGovClient, SamGovNotice } from "../services/sam-api";
+import { SamGovClient, SamGovNotice, parseSamAgencyHierarchy } from "../services/sam-api";
 import { StorageService } from "../services/storage";
 import { OutboundEmailDispatcher } from "./outbound-email";
 import { sql, eq, or } from "drizzle-orm";
@@ -150,6 +150,7 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
 
       // Determine initial status (Award Notices appear in Won / Awarded column; Sources Sought in New; etc.)
       const initialStatus = isAward ? "won" : "new";
+      const hierarchy = parseSamAgencyHierarchy(notice);
 
       // Upsert into D1 opportunities table (preserve pipeline status if existing)
       await db
@@ -158,9 +159,9 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
           id: notice.noticeId,
           solicitationNumber: solNum,
           title: notice.title || "Untitled SDVOSB Solicitation",
-          agency: notice.department || "FEDERAL AGENCY",
-          subTier: notice.subTier || null,
-          office: notice.office || null,
+          agency: hierarchy.agency,
+          subTier: hierarchy.subTier,
+          office: hierarchy.office,
           postedDate: notice.postedDate || new Date().toISOString().split("T")[0],
           responseDeadline: notice.responseDeadLine || null,
           naicsCode: notice.naicsCode || null,
