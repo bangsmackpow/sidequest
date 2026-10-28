@@ -122,6 +122,9 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
                 <i class="fa-solid fa-users-gear mr-2 text-indigo-400"></i>Manage Users &amp; Roles
               </button>
               <div class="border-t border-slate-800 my-1"></div>
+              <button onclick="purgeDemoData(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 text-emerald-400 flex items-center font-medium">
+                <i class="fa-solid fa-broom mr-2 text-emerald-400"></i>Purge Demo Data (Live Only)
+              </button>
               <button onclick="seedDemoData(); toggleUserMenu();" class="w-full text-left px-3 py-2 rounded hover:bg-slate-800 text-slate-400 flex items-center">
                 <i class="fa-solid fa-database mr-2 text-slate-500"></i>Seed Demo Data
               </button>
@@ -364,14 +367,33 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 
     async function loadOpportunities() {
       try {
-        const res = await fetch("/api/v1/opportunities?limit=100", { credentials: "include", headers: fetchHeaders });
+        const res = await fetch("/api/v1/opportunities?limit=200", { credentials: "include", headers: fetchHeaders });
         if (res.ok) {
           const json = await res.json();
           currentOpportunities = json.data || [];
+          populateDynamicNaicsFilter(currentOpportunities);
           renderKanban(currentOpportunities);
         }
       } catch (e) {
         console.error("Failed to load opportunities", e);
+      }
+    }
+
+    function populateDynamicNaicsFilter(opps) {
+      const sel = document.getElementById("filter-naics");
+      if (!sel) return;
+      const currentVal = sel.value;
+      const counts = {};
+      opps.forEach(o => {
+        if (o.naicsCode) {
+          counts[o.naicsCode] = (counts[o.naicsCode] || 0) + 1;
+        }
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      sel.innerHTML = '<option value="">All NAICS (' + opps.length + ')</option>' +
+        sorted.map(([code, cnt]) => \`<option value="\${escapeHtml(code)}">NAICS \${escapeHtml(code)} (\${cnt})</option>\`).join("");
+      if (currentVal && counts[currentVal]) {
+        sel.value = currentVal;
       }
     }
 
@@ -418,11 +440,12 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         card.className = "p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:shadow-lg transition space-y-2.5 cursor-pointer group";
         
         const nType = (opp.noticeType || "").toLowerCase();
-        const isSourcesSought = nType === "r" || (opp.title || "").toLowerCase().includes("sources sought");
+        const isSourcesSought = nType === "r" || nType.includes("sources sought") || (opp.title || "").toLowerCase().includes("sources sought");
         const isRuleOfTwoFlip = isSourcesSought && opp.setAsideCode && !["SDVOSBC", "SDVOSBS"].includes(opp.setAsideCode);
-        const isSoleSource = opp.setAsideCode === "SDVOSBS" || nType === "s";
-        const isCombinedSynopsis = nType === "k";
-        const isAwardNotice = nType === "a";
+        const isSoleSource = opp.setAsideCode === "SDVOSBS" || nType === "s" || nType.includes("special");
+        const isCombinedSynopsis = nType === "k" || nType.includes("combined");
+        const isAwardNotice = nType === "a" || nType.includes("award");
+        const isPresol = nType === "p" || nType.includes("presolicitation");
         const isSat = isCombinedSynopsis ||
                       (opp.title || "").toLowerCase().includes("simplified acquisition") || 
                       (opp.title || "").toLowerCase().includes("sat") || 
@@ -439,6 +462,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
           badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase">RFI / Sources Sought</span>';
         } else if (isCombinedSynopsis) {
           badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 uppercase">⚡ Combined Synopsis</span>';
+        } else if (isPresol) {
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 uppercase">📅 Presolicitation</span>';
         }
 
         const satBadge = isSat
@@ -515,6 +540,27 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-rotate"></i><span>Poll SAM.gov</span>';
+      }
+    }
+
+    async function purgeDemoData() {
+      if (!confirm("Purge all seeded demo opportunities and leave ONLY real live SAM.gov records?")) return;
+      try {
+        const res = await fetch("/api/v1/seed/purge", {
+          method: "POST",
+          headers: fetchHeaders,
+          credentials: "include"
+        });
+        const data = await res.json();
+        if (res.ok) {
+          await loadStats();
+          await loadOpportunities();
+          alert(data.message);
+        } else {
+          alert(data.error || "Purge failed");
+        }
+      } catch (e) {
+        alert("Purge error: " + e.message);
       }
     }
 
@@ -2397,6 +2443,7 @@ export function renderKanbanBoard(): string {
 
           <select id="filter-notice-type" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
             <option value="">All Notice Stages</option>
+            <option value="p">Presolicitation (p)</option>
             <option value="r">Sources Sought / RFI (r)</option>
             <option value="k">Combined Synopsis / SAT (k)</option>
             <option value="o">Solicitation / RFP (o)</option>
@@ -2530,16 +2577,26 @@ export function renderKanbanBoard(): string {
         const filtered = currentOpportunities.filter(o => {
           if (naics && !(o.naicsCode || "").includes(naics)) return false;
           if (setAside && o.setAsideCode !== setAside) return false;
-          if (noticeType && (o.noticeType || "").toLowerCase() !== noticeType.toLowerCase()) return false;
+          const nt = (o.noticeType || "").toLowerCase();
+          if (noticeType) {
+            const targetNt = noticeType.toLowerCase();
+            if (targetNt === "r" && !(nt === "r" || nt.includes("sources sought"))) return false;
+            else if (targetNt === "k" && !(nt === "k" || nt.includes("combined"))) return false;
+            else if (targetNt === "o" && !(nt === "o" || nt === "solicitation")) return false;
+            else if (targetNt === "s" && !(nt === "s" || nt.includes("special"))) return false;
+            else if (targetNt === "a" && !(nt === "a" || nt.includes("award"))) return false;
+            else if (targetNt === "p" && !(nt === "p" || nt.includes("presolicitation"))) return false;
+          }
           if (satFilterActive) {
-            const isSat = (o.noticeType || "").toLowerCase() === "k" ||
+            const isSat = nt === "k" ||
+                          nt.includes("combined") ||
                           (o.title || "").toLowerCase().includes("simplified acquisition") || 
                           (o.title || "").toLowerCase().includes("sat") || 
                           (o.solicitationNumber || "").includes("Q");
             if (!isSat) return false;
           }
           if (ruleOfTwoFilterActive) {
-            const isRo2 = (o.noticeType || "").toLowerCase() === "r" && !["SDVOSBC", "SDVOSBS"].includes(o.setAsideCode || "");
+            const isRo2 = (nt === "r" || nt.includes("sources sought")) && !["SDVOSBC", "SDVOSBS"].includes(o.setAsideCode || "");
             if (!isRo2) return false;
           }
           if (q) {

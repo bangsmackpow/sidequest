@@ -142,8 +142,14 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       const primaryPoc = notice.pointOfContact?.find((p) => p.email) || notice.pointOfContact?.[0];
       const pocEmail = primaryPoc?.email || null;
 
-      // Determine initial status (Award Notices default to reviewing_sow / intelligence if not ours)
-      const initialStatus = notice.type === "a" ? "reviewing_sow" : "new";
+      const rawTypeLower = (notice.type || "").toLowerCase();
+      const isAward = rawTypeLower === "a" || rawTypeLower.includes("award");
+      const isSourcesSought = rawTypeLower === "r" || rawTypeLower.includes("sources sought");
+      const isCombined = rawTypeLower === "k" || rawTypeLower.includes("combined");
+      const isSpecial = rawTypeLower === "s" || rawTypeLower.includes("special");
+
+      // Determine initial status (Award Notices appear in Won / Awarded column; Sources Sought in New; etc.)
+      const initialStatus = isAward ? "won" : "new";
 
       // Upsert into D1 opportunities table (preserve pipeline status if existing)
       await db
@@ -240,7 +246,7 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       }
 
       // 6. Store Award Notice Intelligence (Winner, Amount, Subcontracting / Recompete Data)
-      if (!existingOpp && (notice.type === "a" || notice.award)) {
+      if (!existingOpp && (isAward || notice.award)) {
         const awardAmt = notice.award?.amount
           ? `$${notice.award.amount.toLocaleString("en-US")}`
           : "Unspecified";
@@ -337,19 +343,19 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
         if (naicsMatch && setAsideMatch && noticeTypeMatch) {
           const matchReasons: string[] = [];
           const isRuleOfTwoTarget =
-            notice.type === "r" &&
+            isSourcesSought &&
             notice.typeOfSetAside !== "SDVOSBC" &&
             notice.typeOfSetAside !== "SDVOSBS";
 
           if (isRuleOfTwoTarget) {
             matchReasons.push("🎯 Rule-of-Two Set-Aside Flip Target (FAR 19.1405 / Kingdomware)");
-          } else if (notice.type === "r" || notice.type?.toLowerCase().includes("sources sought")) {
+          } else if (isSourcesSought) {
             matchReasons.push("High-Priority SDVOSB Sources Sought / RFI");
-          } else if (notice.type === "k") {
+          } else if (isCombined) {
             matchReasons.push("⚡ Fast-Track Combined Synopsis/Solicitation (FAR Part 12/13)");
-          } else if (notice.type === "s") {
+          } else if (isSpecial) {
             matchReasons.push("🔒 Special Notice / Sole Source Intent (FAR 19.1406)");
-          } else if (notice.type === "a") {
+          } else if (isAward) {
             matchReasons.push("🏆 Contract Award Intelligence (Subcontracting / Recompete)");
           }
 

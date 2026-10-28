@@ -8,6 +8,7 @@ import {
   opportunityAlerts,
   capabilityStatements,
   savedSearchProfiles,
+  users,
 } from "../db/schema";
 import { eq, and, like, desc, sql, gte, lte } from "drizzle-orm";
 import { StorageService } from "../services/storage";
@@ -631,6 +632,101 @@ apiRouter.post("/seed", requireRole(["admin"]), async (c) => {
   return c.json({
     success: true,
     message: "Successfully seeded multi-tenant SDVOSB opportunities, profiles, and capability records.",
+  });
+});
+
+// POST /api/v1/seed/purge (Purges all seeded/demo records and enriches live SAM.gov records from R2 raw JSON)
+apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
+  const db = c.get("db");
+
+  // 1. Delete all seeded demo opportunities (cascade deletes their notes, attachments, and alerts)
+  await db
+    .delete(opportunities)
+    .where(sql`${opportunities.id} LIKE 'sam-sdvosb-%'`);
+
+  // 2. Delete demo non-admin users (Marcus & Sarah), keeping real / admin accounts
+  await db
+    .delete(users)
+    .where(sql`${users.id} IN ('user_marcus_mgr', 'user_sarah_member')`);
+
+  // 3. Classify live SAM.gov records across Kanban columns based on real SAM.gov noticeType
+  // Award Notices -> 'won' (Won / Awarded column)
+  await db
+    .update(opportunities)
+    .set({ status: "won", updatedAt: sql`(datetime('now'))` })
+    .where(
+      sql`(${opportunities.noticeType} LIKE '%Award%' OR ${opportunities.noticeType} = 'a') AND ${opportunities.status} = 'new'`
+    );
+
+  // Combined Synopsis/Solicitations -> 'reviewing_sow' so active fast-track RFQs stand out
+  await db
+    .update(opportunities)
+    .set({ status: "reviewing_sow", updatedAt: sql`(datetime('now'))` })
+    .where(
+      sql`(${opportunities.noticeType} LIKE '%Combined%' OR ${opportunities.noticeType} = 'k') AND ${opportunities.status} = 'new'`
+    );
+
+  // 4. Backfill Contracting Officer POC directory & Award Intel notes from R2 raw JSON for live SAM.gov records
+  const liveOpps = await db.select().from(opportunities).limit(100);
+  const existingPocNotes = await db
+    .select()
+    .from(opportunityNotes)
+    .where(eq(opportunityNotes.source, "poc_directory"));
+  const existingPocOppIds = new Set(existingPocNotes.map((n) => n.opportunityId));
+
+  let enrichedFromR2 = 0;
+  for (const opp of liveOpps) {
+    if (existingPocOppIds.has(opp.id) || !opp.rawJsonR2Key) continue;
+    try {
+      const obj = await c.env.BUCKET.get(opp.rawJsonR2Key);
+      if (!obj) continue;
+      const notice = (await obj.json()) as any;
+      if (notice.pointOfContact && Array.isArray(notice.pointOfContact) && notice.pointOfContact.length > 0) {
+        const pocLines = notice.pointOfContact.map(
+          (p: any, idx: number) =>
+            `${idx + 1}. ${p.fullName || "Contracting Officer"} (${(p.type || "primary").toUpperCase()}) — Email: ${p.email || "N/A"} | Phone: ${p.phone || "N/A"}`
+        );
+        await db.insert(opportunityNotes).values({
+          id: crypto.randomUUID(),
+          opportunityId: opp.id,
+          organizationId: "org_demo_sdvosb",
+          authorEmail: opp.pointOfContactEmail || "sam-contacts@sdvosb-platform.internal",
+          subject: `Contracting Officer & OSDBU Contact Directory (${opp.solicitationNumber || opp.id})`,
+          content: `Procuring Office: ${[opp.agency, opp.subTier, opp.office].filter(Boolean).join(" / ")}\n\nRegistered Points of Contact:\n${pocLines.join("\n")}`,
+          source: "poc_directory",
+        });
+        enrichedFromR2++;
+      }
+      if (notice.award && (notice.award.amount || notice.award.awardee)) {
+        const awardAmt = notice.award.amount
+          ? `$${Number(notice.award.amount).toLocaleString("en-US")}`
+          : "Published in SAM.gov";
+        const awardeeName = notice.award.awardee?.name || "Awarded Prime Contractor";
+        const awardeeUei = notice.award.awardee?.ueiSAM || "N/A";
+        await db.insert(opportunityNotes).values({
+          id: crypto.randomUUID(),
+          opportunityId: opp.id,
+          organizationId: "org_demo_sdvosb",
+          authorEmail: "award-intelligence@sdvosb-platform.internal",
+          subject: `🏆 Live SAM.gov Contract Award (${awardAmt})`,
+          content: `Official SAM.gov Award Notice for ${opp.solicitationNumber}:\n• Winning Prime: ${awardeeName} (UEI: ${awardeeUei})\n• Award Value: ${awardAmt}\n• Award Date: ${notice.award.date || opp.postedDate}`,
+          source: "award_intel",
+        });
+      }
+    } catch {
+      // ignore individual R2 parse errors
+    }
+  }
+
+  const [remaining] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(opportunities);
+
+  return c.json({
+    success: true,
+    liveOpportunitiesRemaining: remaining?.count || 0,
+    contactsEnrichedFromR2: enrichedFromR2,
+    message: `Purged all seeded demo records. ${remaining?.count || 0} live SAM.gov opportunities active (${enrichedFromR2} enriched with full KO contact cards from R2).`,
   });
 });
 

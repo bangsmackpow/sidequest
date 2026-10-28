@@ -109,11 +109,11 @@ export class SamGovClient {
             // ignore
           }
           console.warn(
-            `[SAM.gov Quota Guard] Daily API rate limit reached (429). Next reset: ${nextAccess}. Using fallback notices.`
+            `[SAM.gov Quota Guard] Daily API rate limit reached (429). Next reset: ${nextAccess}. Preserving existing live database records without injecting mock data.`
           );
-          const fallback = this.getMockOpportunities(params);
           return {
-            ...fallback,
+            notices: [],
+            totalRecords: 0,
             quotaThrottled: true,
             nextAccessTime: nextAccess,
           };
