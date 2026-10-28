@@ -1,3 +1,25 @@
+export const PRIORITY_NAICS_CODES: Array<{
+  code: string;
+  shortLabel: string;
+  title: string;
+}> = [
+  { code: "541519", shortLabel: "IT Services / VAR", title: "Other Computer Related Services" },
+  { code: "423430", shortLabel: "Computer & SW Wholesale", title: "Computer & Peripheral Equipment & Software Wholesalers" },
+  { code: "513210", shortLabel: "Software Publishers", title: "Software Publishers" },
+  { code: "334111", shortLabel: "Electronic Computers", title: "Electronic Computer Manufacturing" },
+  { code: "423840", shortLabel: "Industrial Supplies", title: "Industrial Supplies Merchant Wholesalers" },
+  { code: "423450", shortLabel: "Medical & Hospital Equip", title: "Medical, Dental, & Hospital Equipment Wholesalers" },
+  { code: "423490", shortLabel: "Prof. Equipment & Supplies", title: "Other Professional Equipment & Supplies Wholesalers" },
+  { code: "339940", shortLabel: "Office Supplies Mfg", title: "Office Supplies (except Paper) Manufacturing" },
+  { code: "541512", shortLabel: "Systems Design", title: "Computer Systems Design Services" },
+  { code: "541511", shortLabel: "Custom Programming", title: "Custom Computer Programming Services" },
+  { code: "541330", shortLabel: "Engineering Services", title: "Engineering Services" },
+  { code: "541611", shortLabel: "Management Consulting", title: "Administrative & General Management Consulting" },
+  { code: "541690", shortLabel: "Tech Consulting", title: "Other Scientific & Technical Consulting Services" },
+];
+
+export const PRIORITY_NAICS_LIST: string[] = PRIORITY_NAICS_CODES.map((n) => n.code);
+
 export interface SamGovNotice {
   noticeId: string;
   title: string;

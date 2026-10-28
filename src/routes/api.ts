@@ -20,7 +20,7 @@ import {
   ProcurementCategory,
 } from "../services/compliance-and-intel";
 import { runSamIngestion } from "../workers/ingest";
-import { parseSamAgencyHierarchy } from "../services/sam-api";
+import { parseSamAgencyHierarchy, PRIORITY_NAICS_LIST, PRIORITY_NAICS_CODES } from "../services/sam-api";
 import { handleInboundEmail } from "../workers/email";
 import { OutboundEmailDispatcher } from "../workers/outbound-email";
 import { seedDatabase } from "../db/seed";
@@ -650,22 +650,37 @@ apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
     .delete(users)
     .where(sql`${users.id} IN ('user_marcus_mgr', 'user_sarah_member')`);
 
-  // 3. Classify live SAM.gov records across Kanban columns based on real SAM.gov noticeType
-  // Award Notices -> 'won' (Won / Awarded column)
+  // 3. Reset all opportunities to 'new' so Reviewing SOW, Drafting, Submitted, and Won only contain user-triaged opportunities
   await db
     .update(opportunities)
-    .set({ status: "won", updatedAt: sql`(datetime('now'))` })
-    .where(
-      sql`(${opportunities.noticeType} LIKE '%Award%' OR ${opportunities.noticeType} = 'a') AND ${opportunities.status} = 'new'`
-    );
+    .set({ status: "new", updatedAt: sql`(datetime('now'))` });
 
-  // Combined Synopsis/Solicitations -> 'reviewing_sow' so active fast-track RFQs stand out
+  // 4. Sync Saved Search Profile with the user's 13 Priority NAICS Codes
   await db
-    .update(opportunities)
-    .set({ status: "reviewing_sow", updatedAt: sql`(datetime('now'))` })
-    .where(
-      sql`(${opportunities.noticeType} LIKE '%Combined%' OR ${opportunities.noticeType} = 'k') AND ${opportunities.status} = 'new'`
-    );
+    .delete(savedSearchProfiles)
+    .where(eq(savedSearchProfiles.id, "profile-dod-sat"));
+
+  await db
+    .insert(savedSearchProfiles)
+    .values({
+      id: "profile-va-cyber",
+      organizationId: "org_demo_sdvosb",
+      name: "Priority SDVOSB Target NAICS (13 Core Codes)",
+      naicsCodes: JSON.stringify(PRIORITY_NAICS_LIST),
+      setAsides: JSON.stringify(["SDVOSBC", "SDVOSBS", "VOSBC", "SBA"]),
+      noticeTypes: JSON.stringify(["p", "r", "k", "o", "s", "a"]),
+      active: true,
+    })
+    .onConflictDoUpdate({
+      target: savedSearchProfiles.id,
+      set: {
+        name: "Priority SDVOSB Target NAICS (13 Core Codes)",
+        naicsCodes: JSON.stringify(PRIORITY_NAICS_LIST),
+        setAsides: JSON.stringify(["SDVOSBC", "SDVOSBS", "VOSBC", "SBA"]),
+        noticeTypes: JSON.stringify(["p", "r", "k", "o", "s", "a"]),
+        active: true,
+      },
+    });
 
   // 4. Backfill Contracting Officer POC directory & Award Intel notes from R2 raw JSON for live SAM.gov records
   const liveOpps = await db.select().from(opportunities).limit(100);
@@ -752,7 +767,16 @@ apiRouter.post("/seed/purge", requireRole(["admin"]), async (c) => {
 
 // POST /api/v1/ingest/run (Manual trigger for polling SAM.gov)
 apiRouter.post("/ingest/run", requireRole(["admin", "manager"]), async (c) => {
-  const result = await runSamIngestion(c.env);
+  let body: { lookbackDays?: number; naicsCode?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // empty body is valid
+  }
+  const result = await runSamIngestion(c.env, {
+    lookbackDays: body.lookbackDays || 14,
+    naicsCode: body.naicsCode,
+  });
   return c.json(result);
 });
 

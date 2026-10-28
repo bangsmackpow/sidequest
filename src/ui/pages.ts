@@ -1,10 +1,33 @@
 export function renderAppLayout(content: string, title = "SDVOSB Federal Capture Platform") {
   return `<!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<html lang="en" class="h-full bg-slate-950 text-slate-100 theme-light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title} | Sidequest GovTech</title>
+  <meta name="description" content="SAM.gov SDVOSB Contract Capture, Compliance & Proposal Lifecycle Platform">
+  <meta name="theme-color" id="meta-theme-color" content="#f8fafc">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Sidequest">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icon-192.svg">
+  <link rel="apple-touch-icon" href="/icon-192.svg">
+  <script>
+    (function() {
+      try {
+        var savedTheme = localStorage.getItem("sidequest_theme") || "light";
+        var root = document.documentElement;
+        if (savedTheme === "dark") {
+          root.classList.remove("theme-light");
+          root.classList.add("theme-dark");
+        } else {
+          root.classList.remove("theme-dark");
+          root.classList.add("theme-light");
+        }
+      } catch (e) {}
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -19,13 +42,118 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       color: #fbbf24;
     }
     .kanban-col {
-      min-height: calc(100vh - 270px);
+      min-height: calc(100vh - 330px);
     }
     /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #020617; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* ==========================================================================
+       LIGHT MODE (DEFAULT) THEME OVERRIDES
+       ========================================================================== */
+    html.theme-light,
+    html.theme-light body {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    html.theme-light ::-webkit-scrollbar-track { background: #e2e8f0; }
+    html.theme-light ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+    html.theme-light ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+    /* Primary Card, Header & Modal Surfaces */
+    html.theme-light .bg-slate-900,
+    html.theme-light .bg-slate-900\\/90,
+    html.theme-light .bg-slate-900\\/80,
+    html.theme-light .bg-slate-900\\/60,
+    html.theme-light .bg-slate-900\\/40 {
+      background-color: #ffffff !important;
+      box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+    }
+    /* Page Wells, Kanban Columns & Code Blocks */
+    html.theme-light .bg-slate-950,
+    html.theme-light .bg-slate-950\\/90,
+    html.theme-light .bg-slate-950\\/80,
+    html.theme-light .bg-slate-950\\/70,
+    html.theme-light .bg-slate-950\\/60,
+    html.theme-light .bg-slate-950\\/50 {
+      background-color: #f8fafc !important;
+    }
+    /* Inputs, Secondary Buttons & Badges */
+    html.theme-light .bg-slate-800,
+    html.theme-light .bg-slate-800\\/80,
+    html.theme-light .bg-slate-800\\/70,
+    html.theme-light .bg-slate-800\\/60,
+    html.theme-light .bg-slate-800\\/40 {
+      background-color: #f1f5f9 !important;
+    }
+    html.theme-light .hover\\:bg-slate-800:hover,
+    html.theme-light .hover\\:bg-slate-700:hover,
+    html.theme-light .hover\\:bg-slate-800\\/60:hover {
+      background-color: #e2e8f0 !important;
+    }
+    /* Borders & Dividers */
+    html.theme-light .border-slate-800,
+    html.theme-light .border-slate-800\\/80,
+    html.theme-light .border-slate-700,
+    html.theme-light .border-slate-700\\/60,
+    html.theme-light .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+    html.theme-light .divide-slate-800\\/60 > :not([hidden]) ~ :not([hidden]) {
+      border-color: #cbd5e1 !important;
+    }
+    /* Typography */
+    html.theme-light .text-white:not(.bg-indigo-600):not(.bg-emerald-600):not(.bg-rose-600):not(.bg-cyan-600):not(.bg-amber-600),
+    html.theme-light .text-slate-100,
+    html.theme-light .text-slate-200 {
+      color: #0f172a !important;
+    }
+    html.theme-light .text-slate-300 {
+      color: #1e293b !important;
+    }
+    html.theme-light .text-slate-400 {
+      color: #475569 !important;
+    }
+    html.theme-light .text-slate-500 {
+      color: #64748b !important;
+    }
+    /* Semantic Accent Readability in Light Mode */
+    html.theme-light .badge-sat {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(5, 150, 105, 0.45);
+      color: #047857 !important;
+    }
+    html.theme-light .badge-sdvosb {
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(217, 119, 6, 0.45);
+      color: #b45309 !important;
+    }
+    html.theme-light .text-amber-400,
+    html.theme-light .text-amber-300 { color: #b45309 !important; }
+    html.theme-light .text-emerald-400,
+    html.theme-light .text-emerald-300 { color: #047857 !important; }
+    html.theme-light .text-cyan-400,
+    html.theme-light .text-cyan-300 { color: #0e7490 !important; }
+    html.theme-light .text-blue-400,
+    html.theme-light .text-blue-300 { color: #1d4ed8 !important; }
+    html.theme-light .text-purple-400,
+    html.theme-light .text-purple-300 { color: #6d28d9 !important; }
+    html.theme-light .text-fuchsia-400,
+    html.theme-light .text-fuchsia-300 { color: #a21caf !important; }
+    html.theme-light .text-indigo-400,
+    html.theme-light .text-indigo-300 { color: #4338ca !important; }
+    html.theme-light .text-rose-400,
+    html.theme-light .text-rose-300,
+    html.theme-light .text-rose-200 { color: #be123c !important; }
+    html.theme-light .bg-amber-950\\/60,
+    html.theme-light .bg-amber-950\\/20 { background-color: #fef3c7 !important; }
+    html.theme-light .bg-rose-950\\/80,
+    html.theme-light .bg-rose-950\\/60,
+    html.theme-light .bg-rose-950\\/40 { background-color: #ffe4e6 !important; }
+    html.theme-light .bg-emerald-950\\/40,
+    html.theme-light .bg-emerald-950\\/20 { background-color: #d1fae5 !important; }
+    html.theme-light .bg-cyan-950\\/20 { background-color: #cffafe !important; }
+    html.theme-light .bg-indigo-950\\/30 { background-color: #e0e7ff !important; }
   </style>
 </head>
 <body class="h-full flex flex-col font-sans antialiased selection:bg-amber-500 selection:text-slate-900">
@@ -52,8 +180,8 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         </div>
 
         <!-- Quick Metrics & Actions -->
-        <div class="flex items-center space-x-2.5">
-          <div id="sync-status-badge" class="hidden sm:flex items-center space-x-2 text-xs px-2.5 py-1.5 rounded-md bg-slate-800/80 border border-slate-700 text-slate-300">
+        <div class="flex items-center space-x-2">
+          <div id="sync-status-badge" class="hidden lg:flex items-center space-x-2 text-xs px-2.5 py-1.5 rounded-md bg-slate-800/80 border border-slate-700 text-slate-300">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span id="last-sync-text">SAM.gov Sync: Ready</span>
           </div>
@@ -71,12 +199,24 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
             <i class="fa-solid fa-scale-balanced mr-1 text-emerald-400"></i>50% Calc
           </button>
 
-          <button onclick="openModal('modal-profiles')" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
+          <button onclick="openModal('modal-profiles')" class="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
             <i class="fa-solid fa-sliders mr-1 text-slate-400"></i>Profiles
           </button>
 
-          <button onclick="openModal('modal-capability')" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
+          <button onclick="openModal('modal-capability')" class="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
             <i class="fa-solid fa-award mr-1 text-amber-400"></i>Credentials
+          </button>
+
+          <!-- PWA Install App Button (shown when installable) -->
+          <button id="btn-pwa-install" onclick="installPwaApp()" class="hidden items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition shadow" title="Install Sidequest as a Desktop/Mobile App">
+            <i class="fa-solid fa-download"></i>
+            <span class="hidden md:inline">Install App</span>
+          </button>
+
+          <!-- Light / Dark Theme Toggle Button (Light Mode Default, Persisted in localStorage) -->
+          <button id="btn-theme-toggle" onclick="toggleTheme()" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition" title="Switch between Light Mode and Dark Mode">
+            <i id="theme-toggle-icon" class="fa-solid fa-moon text-indigo-400"></i>
+            <span id="theme-toggle-label" class="hidden md:inline font-medium">Dark</span>
           </button>
 
           <!-- Admin Console Button (Only shown for Admin) -->
@@ -379,23 +519,173 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       }
     }
 
+    const PRIORITY_NAICS = [
+      { code: "541519", shortLabel: "IT Services / VAR", title: "Other Computer Related Services" },
+      { code: "423430", shortLabel: "Computer & SW Wholesale", title: "Computer & Peripheral Equipment & Software Wholesalers" },
+      { code: "513210", shortLabel: "Software Publishers", title: "Software Publishers" },
+      { code: "334111", shortLabel: "Electronic Computers", title: "Electronic Computer Manufacturing" },
+      { code: "423840", shortLabel: "Industrial Supplies", title: "Industrial Supplies Merchant Wholesalers" },
+      { code: "423450", shortLabel: "Medical & Hospital Equip", title: "Medical, Dental, & Hospital Equipment Wholesalers" },
+      { code: "423490", shortLabel: "Prof. Equipment", title: "Other Professional Equipment & Supplies Wholesalers" },
+      { code: "339940", shortLabel: "Office Supplies Mfg", title: "Office Supplies (except Paper) Manufacturing" },
+      { code: "541512", shortLabel: "Systems Design", title: "Computer Systems Design Services" },
+      { code: "541511", shortLabel: "Custom Programming", title: "Custom Computer Programming Services" },
+      { code: "541330", shortLabel: "Engineering Services", title: "Engineering Services" },
+      { code: "541611", shortLabel: "Management Consulting", title: "Administrative & General Management Consulting" },
+      { code: "541690", shortLabel: "Tech Consulting", title: "Other Scientific & Technical Consulting Services" }
+    ];
+    const PRIORITY_NAICS_SET = new Set(PRIORITY_NAICS.map(n => n.code));
+
+    function applyThemeUI(theme) {
+      const root = document.documentElement;
+      const icon = document.getElementById("theme-toggle-icon");
+      const label = document.getElementById("theme-toggle-label");
+      const metaColor = document.getElementById("meta-theme-color");
+      if (theme === "dark") {
+        root.classList.remove("theme-light");
+        root.classList.add("theme-dark");
+        if (icon) icon.className = "fa-solid fa-sun text-amber-400";
+        if (label) label.innerText = "Light";
+        if (metaColor) metaColor.setAttribute("content", "#090d16");
+      } else {
+        root.classList.remove("theme-dark");
+        root.classList.add("theme-light");
+        if (icon) icon.className = "fa-solid fa-moon text-indigo-400";
+        if (label) label.innerText = "Dark";
+        if (metaColor) metaColor.setAttribute("content", "#f8fafc");
+      }
+    }
+
+    function toggleTheme() {
+      const current = localStorage.getItem("sidequest_theme") || "light";
+      const next = current === "light" ? "dark" : "light";
+      localStorage.setItem("sidequest_theme", next);
+      applyThemeUI(next);
+    }
+    window.toggleTheme = toggleTheme;
+
+    let deferredPwaPrompt = null;
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPwaPrompt = e;
+      const btn = document.getElementById("btn-pwa-install");
+      if (btn) {
+        btn.classList.remove("hidden");
+        btn.classList.add("flex");
+      }
+    });
+
+    async function installPwaApp() {
+      if (!deferredPwaPrompt) return;
+      deferredPwaPrompt.prompt();
+      await deferredPwaPrompt.userChoice;
+      deferredPwaPrompt = null;
+      const btn = document.getElementById("btn-pwa-install");
+      if (btn) {
+        btn.classList.add("hidden");
+        btn.classList.remove("flex");
+      }
+    }
+    window.installPwaApp = installPwaApp;
+
     function populateDynamicNaicsFilter(opps) {
       const sel = document.getElementById("filter-naics");
-      if (!sel) return;
-      const currentVal = sel.value;
+      const currentVal = sel ? sel.value : "";
       const counts = {};
+      let priorityTotal = 0;
+
       opps.forEach(o => {
         if (o.naicsCode) {
           counts[o.naicsCode] = (counts[o.naicsCode] || 0) + 1;
+          if (PRIORITY_NAICS_SET.has(o.naicsCode)) {
+            priorityTotal++;
+          }
         }
       });
-      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-      sel.innerHTML = '<option value="">All NAICS (' + opps.length + ')</option>' +
-        sorted.map(([code, cnt]) => \`<option value="\${escapeHtml(code)}">NAICS \${escapeHtml(code)} (\${cnt})</option>\`).join("");
-      if (currentVal && counts[currentVal]) {
-        sel.value = currentVal;
+
+      if (sel) {
+        const priorityOptions = PRIORITY_NAICS.map(n => {
+          const cnt = counts[n.code] || 0;
+          return \`<option value="\${n.code}">★ \${n.code} — \${escapeHtml(n.shortLabel)} (\${cnt})</option>\`;
+        }).join("");
+
+        const otherOptions = Object.entries(counts)
+          .filter(([code]) => !PRIORITY_NAICS_SET.has(code))
+          .sort((a, b) => b[1] - a[1])
+          .map(([code, cnt]) => \`<option value="\${escapeHtml(code)}">NAICS \${escapeHtml(code)} (\${cnt})</option>\`)
+          .join("");
+
+        sel.innerHTML =
+          \`<option value="">All NAICS (\${opps.length})</option>\` +
+          \`<option value="PRIORITY_ALL">★ All 13 Target NAICS (\${priorityTotal})</option>\` +
+          \`<optgroup label="★ Priority Target NAICS (13 Codes)">\${priorityOptions}</optgroup>\` +
+          (otherOptions ? \`<optgroup label="Other Active SAM.gov NAICS">\${otherOptions}</optgroup>\` : "");
+
+        if (currentVal) {
+          sel.value = currentVal;
+        }
       }
+
+      renderPriorityNaicsBar(opps, counts, priorityTotal);
     }
+
+    function renderPriorityNaicsBar(opps, counts, priorityTotal) {
+      const bar = document.getElementById("priority-naics-pills");
+      const summaryBadge = document.getElementById("priority-naics-summary");
+      if (!bar) return;
+      const sel = document.getElementById("filter-naics");
+      const activeNaics = sel ? sel.value : "";
+
+      if (summaryBadge) {
+        summaryBadge.innerText = \`\${priorityTotal} of \${opps.length} live notices match your 13 target NAICS\`;
+      }
+
+      const allBtnClass = activeNaics === ""
+        ? "bg-amber-500 text-slate-950 font-bold border-amber-500 shadow-sm"
+        : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700";
+
+      const priorityAllClass = activeNaics === "PRIORITY_ALL"
+        ? "bg-amber-500 text-slate-950 font-bold border-amber-500 shadow-sm"
+        : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/40 font-semibold";
+
+      const pillsHtml = PRIORITY_NAICS.map(n => {
+        const cnt = counts[n.code] || 0;
+        const isSelected = activeNaics === n.code;
+        const cls = isSelected
+          ? "bg-amber-500 text-slate-950 font-bold border-amber-500 shadow-sm"
+          : cnt > 0
+            ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border-emerald-500/40 font-semibold"
+            : "bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700";
+        return \`<button onclick="selectPriorityNaics('\${n.code}')" title="\${escapeHtml(n.title)}" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${cls}">
+          <span class="font-mono font-bold">\${n.code}</span>
+          <span class="hidden sm:inline">\${escapeHtml(n.shortLabel)}</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/40 font-mono">\${cnt}</span>
+        </button>\`;
+      }).join("");
+
+      bar.innerHTML = \`
+        <button onclick="selectPriorityNaics('')" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${allBtnClass}">
+          <span>All Notices</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/30 font-mono">\${opps.length}</span>
+        </button>
+        <button onclick="selectPriorityNaics('PRIORITY_ALL')" class="px-2.5 py-1 rounded-lg border text-[11px] transition flex items-center gap-1.5 \${priorityAllClass}">
+          <i class="fa-solid fa-star text-[10px]"></i>
+          <span>All 13 Target NAICS</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-950/30 font-mono">\${priorityTotal}</span>
+        </button>
+        \${pillsHtml}
+      \`;
+    }
+
+    function selectPriorityNaics(code) {
+      const sel = document.getElementById("filter-naics");
+      if (sel) {
+        sel.value = code;
+      }
+      populateDynamicNaicsFilter(currentOpportunities);
+      applyFilters();
+    }
+    window.selectPriorityNaics = selectPriorityNaics;
 
     function calculateDeadlineBadge(deadlineStr) {
       if (!deadlineStr) return '<span class="text-slate-500 font-mono text-[11px]">No deadline</span>';
@@ -457,7 +747,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         } else if (isSoleSource) {
           badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/40 uppercase">🔒 Sole Source</span>';
         } else if (isAwardNotice) {
-          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 uppercase">🏆 Award Notice</span>';
+          badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 uppercase" title="Public SAM.gov Award Notice (Awarded to another vendor)">🏆 Market Award (Competitor)</span>';
         } else if (isSourcesSought) {
           badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase">RFI / Sources Sought</span>';
         } else if (isCombinedSynopsis) {
@@ -465,6 +755,12 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
         } else if (isPresol) {
           badgeType = '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 uppercase">📅 Presolicitation</span>';
         }
+
+        const isPriorityNaics = opp.naicsCode && PRIORITY_NAICS_SET.has(opp.naicsCode);
+        const priorityNaicsObj = isPriorityNaics ? PRIORITY_NAICS.find(n => n.code === opp.naicsCode) : null;
+        const targetNaicsBadge = isPriorityNaics
+          ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded badge-sdvosb uppercase">★ Target NAICS</span>'
+          : '';
 
         const satBadge = isSat
           ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded badge-sat uppercase">SAT &lt; $250k</span>'
@@ -476,6 +772,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
           <div class="flex items-center justify-between gap-1">
             <div class="flex items-center gap-1.5 flex-wrap">
               \${badgeType}
+              \${targetNaicsBadge}
               \${satBadge}
             </div>
             <span class="text-[10px] font-mono text-slate-400">\${opp.solicitationNumber || opp.id.substring(0,8)}</span>
@@ -491,7 +788,7 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
               <span class="truncate">\${opp.agency || "Federal Agency"}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-slate-400"><i class="fa-solid fa-tag text-[10px] w-4 text-slate-500"></i>NAICS \${opp.naicsCode || "N/A"}</span>
+              <span class="\${isPriorityNaics ? 'text-amber-400 font-semibold' : 'text-slate-400'}"><i class="fa-solid fa-tag text-[10px] w-4 text-slate-500"></i>NAICS \${opp.naicsCode || "N/A"}\${priorityNaicsObj ? ' · ' + escapeHtml(priorityNaicsObj.shortLabel) : ''}</span>
               \${deadlineHtml}
             </div>
           </div>
@@ -517,20 +814,28 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       document.getElementById("count-won").innerText = cols.won ? cols.won.children.length : 0;
     }
 
-    async function triggerSamSync() {
+    async function triggerSamSync(customNaicsCode = "") {
       const btn = document.getElementById("btn-sync");
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Ingesting...</span>';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Ingesting...</span>';
+      }
       
       try {
+        const sel = document.getElementById("filter-naics");
+        const activeFilterNaics = customNaicsCode || (sel && sel.value && sel.value !== "PRIORITY_ALL" ? sel.value : "");
         const res = await fetch("/api/v1/ingest/run", {
           method: "POST",
           headers: fetchHeaders,
-          credentials: "include"
+          credentials: "include",
+          body: JSON.stringify({
+            lookbackDays: activeFilterNaics ? 30 : 14,
+            naicsCode: activeFilterNaics || undefined
+          })
         });
         const result = await res.json();
         const quotaMsg = result.quotaThrottled
-          ? \`\\n(Note: SAM.gov daily API quota reached; resets at \${result.nextAccessTime}. Synced curated SDVOSB lifecycle notices.)\`
+          ? \`\\n(Note: SAM.gov daily API quota reached; resets at \${result.nextAccessTime}.)\`
           : "";
         alert(\`SAM.gov Sync Completed! Processed: \${result.noticesProcessed} notices, Alerts: \${result.alertsCreated}, Amendments: \${result.amendmentsDetected || 0}\${quotaMsg}\`);
         await loadStats();
@@ -538,8 +843,10 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
       } catch (e) {
         alert("Failed to sync with SAM.gov: " + e.message);
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-rotate"></i><span>Poll SAM.gov</span>';
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-rotate"></i><span>Poll SAM.gov</span>';
+        }
       }
     }
 
@@ -2407,6 +2714,17 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 
     // Auto load on init
     window.addEventListener("DOMContentLoaded", () => {
+      // Sync Light/Dark Theme Toggle UI (Light Mode default)
+      const savedTheme = localStorage.getItem("sidequest_theme") || "light";
+      applyThemeUI(savedTheme);
+
+      // Register PWA Service Worker
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch((err) => {
+          console.warn("ServiceWorker registration warning:", err);
+        });
+      }
+
       // Check for password reset token in query string
       const urlParams = new URLSearchParams(window.location.search);
       const resetToken = urlParams.get("reset_token");
@@ -2427,6 +2745,28 @@ export function renderAppLayout(content: string, title = "SDVOSB Federal Capture
 export function renderKanbanBoard(): string {
   return `
     <div class="space-y-4">
+
+      <!-- Front-and-Center Priority Target NAICS Focus Bar (13 Target Codes) -->
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <i class="fa-solid fa-bullseye"></i>Target NAICS Focus
+            </span>
+            <span class="text-xs font-semibold text-slate-200">Your 13 Core NAICS Capture Codes</span>
+            <span id="priority-naics-summary" class="text-[11px] text-slate-400 font-mono">Loading live NAICS matches...</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="triggerSamSync()" class="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-[11px] font-semibold transition flex items-center gap-1.5" title="Poll SAM.gov (30-day window when a specific NAICS code is selected)">
+              <i class="fa-solid fa-satellite-dish text-[10px]"></i>
+              <span>Poll SAM.gov for Selected NAICS</span>
+            </button>
+          </div>
+        </div>
+        <div id="priority-naics-pills" class="flex flex-wrap items-center gap-1.5">
+          <!-- Populated dynamically by renderPriorityNaicsBar() -->
+        </div>
+      </div>
       
       <!-- Filter Bar -->
       <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -2448,14 +2788,12 @@ export function renderKanbanBoard(): string {
             <option value="k">Combined Synopsis / SAT (k)</option>
             <option value="o">Solicitation / RFP (o)</option>
             <option value="s">Special / Sole Source (s)</option>
-            <option value="a">Award Notice (a)</option>
+            <option value="a">Award Notice / Market Awards (a)</option>
           </select>
 
-          <select id="filter-naics" onchange="applyFilters()" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
+          <select id="filter-naics" onchange="populateDynamicNaicsFilter(currentOpportunities); applyFilters();" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-slate-200">
             <option value="">All NAICS</option>
-            <option value="541512">541512 (Systems Integration)</option>
-            <option value="541519">541519 (Other IT Services)</option>
-            <option value="541511">541511 (Custom Programming)</option>
+            <option value="PRIORITY_ALL">★ All 13 Target NAICS</option>
           </select>
 
           <button id="btn-sat-toggle" onclick="toggleSatFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
@@ -2531,7 +2869,7 @@ export function renderKanbanBoard(): string {
           <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
             <div class="flex items-center space-x-2">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Won / Awarded</h3>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">My Won Contracts</h3>
             </div>
             <span id="count-won" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-semibold">0</span>
           </div>
@@ -2575,7 +2913,11 @@ export function renderKanbanBoard(): string {
         const q = document.getElementById("search-input").value.toLowerCase().trim();
 
         const filtered = currentOpportunities.filter(o => {
-          if (naics && !(o.naicsCode || "").includes(naics)) return false;
+          if (naics === "PRIORITY_ALL") {
+            if (!o.naicsCode || !PRIORITY_NAICS_SET.has(o.naicsCode)) return false;
+          } else if (naics) {
+            if (!(o.naicsCode || "").includes(naics)) return false;
+          }
           if (setAside && o.setAsideCode !== setAside) return false;
           const nt = (o.noticeType || "").toLowerCase();
           if (noticeType) {

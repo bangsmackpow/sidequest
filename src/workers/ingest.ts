@@ -26,26 +26,31 @@ export interface IngestionResult {
   error?: string;
 }
 
-export async function runSamIngestion(env: Env): Promise<IngestionResult> {
+export async function runSamIngestion(
+  env: Env,
+  options?: { lookbackDays?: number; naicsCode?: string }
+): Promise<IngestionResult> {
   const db = createDb(env.DB);
   const storage = new StorageService(env.BUCKET);
   const samClient = new SamGovClient(env.SAM_GOV_API_KEY);
   const emailDispatcher = new OutboundEmailDispatcher(env);
 
-  // 1. State Management: Read last run timestamp from KV
+  // 1. State Management: Read last run timestamp from KV or use custom lookback window
   const lastSyncIso = await env.KV.get("sam_last_sync_timestamp");
   const now = new Date();
   let postedFromDate: Date;
 
-  if (lastSyncIso) {
+  if (options?.lookbackDays && options.lookbackDays > 0) {
+    postedFromDate = new Date(now.getTime() - options.lookbackDays * 24 * 60 * 60 * 1000);
+  } else if (lastSyncIso) {
     postedFromDate = new Date(lastSyncIso);
-    // If the saved date is invalid or in the future, default to 24 hours ago
+    // If the saved date is invalid or in the future, default to 7 days ago
     if (isNaN(postedFromDate.getTime()) || postedFromDate > now) {
-      postedFromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      postedFromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
   } else {
-    // Default to past 24 hours
-    postedFromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    // Default to past 7 days
+    postedFromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   }
 
   const postedFrom = SamGovClient.formatSamDate(postedFromDate);
@@ -68,6 +73,7 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       limit: 100,
       ptype: "p,r,k,o,s,a",
       typeOfSetAside: "SDVOSBC",
+      naicsCode: options?.naicsCode,
     });
 
     // If live API key is configured, not throttled, and any profile targets Rule-of-Two Shaping ("SBA" or "NONE"),
@@ -148,8 +154,8 @@ export async function runSamIngestion(env: Env): Promise<IngestionResult> {
       const isCombined = rawTypeLower === "k" || rawTypeLower.includes("combined");
       const isSpecial = rawTypeLower === "s" || rawTypeLower.includes("special");
 
-      // Determine initial status (Award Notices appear in Won / Awarded column; Sources Sought in New; etc.)
-      const initialStatus = isAward ? "won" : "new";
+      // All newly ingested SAM.gov notices start in "new" so personal pipeline columns (reviewing_sow, drafting_rfi, submitted, won) remain 100% user-controlled
+      const initialStatus = "new";
       const hierarchy = parseSamAgencyHierarchy(notice);
 
       // Upsert into D1 opportunities table (preserve pipeline status if existing)
